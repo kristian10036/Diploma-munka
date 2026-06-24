@@ -733,10 +733,55 @@ ES-modul, 152 új unit assertion, mind a `node --check` + offline-acceptance
 + 132 pytest + élő Playwright (smoke + canvas-render + data-path) zöld. A
 `viewMin`/`viewMax` store szándékosan elhalasztva (lásd fent).
 
+### Elkészült: 6. szelet – spectrum-data.js (tiszta sweep-adat helperek)
+
+A megmaradt tiszta/önálló spektrum-sweep adat-segédfüggvények kiemelve
+(nem mutable-state store, hanem tiszta logika – a bevált zéró-kockázatú
+mintával).
+
+- Új fájl: `python-processor/static/ui/spectrum-data.js` – `peakOfArray`
+  (tömb-csúcskeresés), `generateDemoSweep` (demo-mód szintetikus sweep), és
+  a `extractSpectrumPayload` (payload-alak kinyerés). Importálja a
+  `NUM_BINS`/`binToFreq`/`clamp`/`DBM_MIN`-t a spectrum-scale.js-ből.
+  Testek szó szerint változatlanok (verbatim kiemelés).
+- `normalizeIncoming` SZÁNDÉKOSAN maradt az index.html-ben: a classic
+  `SpectrumFrameAdapter` globálra épül (`<script src>`, nem ESM export),
+  ezért tiszta kiemelése nem lehetséges window-bridge/injektálás nélkül.
+- **Holt kód megőrizve:** az `extractSpectrumPayload` már a kiemelés előtt
+  is használaton kívüli volt az index.html-ben (0 hívási hely) – mint a
+  `formatUnknownStatus` az 1. szeletben. Áthelyezve+exportálva (tesztelve),
+  de az index.html NEM importálja vissza.
+- `index.html`: 3570 → 3510 sor. A `peakOfArray` (2 hívás) és
+  `generateDemoSweep` (1 hívás) named importtal, érintetlen hívási helyekkel.
+- Új unit teszt: `tests/frontend/test_spectrum_data.js` (15 assertion –
+  extract payload-ágak, peakOfArray max/ablak/NaN, demo sweep hossz+szerkezet+
+  clamp tartomány).
+- **Verifikáció (mind PASS):** `node --check`; 15-assertion unit teszt;
+  `offline-acceptance.sh` (0 FAIL); teljes `pytest` (132 passed); élő
+  Playwright smoke (zero pageerror); **canvas-render check** (a `generateDemoSweep`
+  táplálja a demo-rajzolást – 27 szín, nem üres). `GET /ui/spectrum-data.js` → 200.
+
+### Összegzés – Fázis 1 frontend modularizáció (6 szelet, + api-client)
+
+| Szelet | Modul | Jelleg | Unit assert |
+|---|---|---|---|
+| 1 | `ui/observation-format.js` | verbatim | 49 |
+| 2 | `ui/html.js` | verbatim | 9 |
+| 3 | `ui/device-observation-view.js` | pure/impure split | 32 |
+| 4 | `ui/spectrum-scale.js` | verbatim | 44 |
+| 5 | `ui/band-popover-view.js` | pure/impure split | 18 |
+| 6 | `ui/spectrum-data.js` | verbatim | 15 |
+
+(+ a korábbi `api/api-client.js`, 49 fetch call site.) `index.html`: a
+`<script>` a `b1abb31` óta ~348 sorral rövidebb; 6 új ES-modul a `ui/`-ban,
+167 új unit assertion. A `b1abb31`..`6345eeb` az 1–5. szeletet commitolta;
+a 6. szelet jelenleg **commitolatlan** (a felhasználó kérésére a push/SSH
+beállítás félbehagyva – a remote SSH-ra állítva, kulcs generálva, de a
+publikus kulcs GitHubhoz adása + push a felhasználóra vár).
+
 ### Következő lehetséges szeletek (sorrend még nyitott)
 
-(a) a reference store (`referenceBands`/`referenceImages`/`nmhhBands` +
-lekérő/rajzoló logika); (b) a session-controller
-(`activeMeasurementSession`/`viewedSession` + `refreshMeasurementSession`/
-`startMeasurementSession`/stb.); (c) opcionálisan az elhalasztott
-viewMin/viewMax store, ha külön döntés születik róla.
+A tiszta-logika kiemelések lényegében elfogytak. Ami maradt, az
+mutable-state store/controller (magasabb kockázat, mérsékelt strukturális
+haszon): (a) reference store; (b) session-controller; (c) az elhalasztott
+viewMin/viewMax store. Ezek külön döntést igényelnek.
