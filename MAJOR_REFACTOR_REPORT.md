@@ -226,10 +226,181 @@ csendesen elnyelt hiba is, ld. `archiveMarker`). Az `api-client.js`
 kiemelésnek ezt call site-onként kell megőriznie, ezért ez saját,
 külön lépés – nem fért bele ebbe a sessionbe.
 
-### Következő lépés (még nem kezdődött el)
+### Pontos fetch-leltár (újraszámolva, 2026-06-24 folytatás)
 
-`api/api-client.js` + egységes `ApiError` parser kiemelése mind a 41
-hívásra, call site-onkénti üzenet-megőrzéssel, utána a fenti
-Playwright smoke + `test_ui_static.py` + `ruff` + teljes pytest
-újrafuttatásával. Ezután jöhet a `state/*` store-ok és a
-`controllers/*` rétegek.
+A korábbi „41” becslés helyett pontos `grep -n "fetch("` számlálás:
+**48 sor, 49 db `fetch(` előfordulás** (a 2628. sor egy `Promise.all`-ban
+két fetch-et tartalmaz egyetlen sorban). Pontos lista sorszámmal
+(mind a `python-processor/static/index.html` jelenlegi, 3883 soros
+állapotára vonatkozik):
+
+| Sor | Endpoint | Csoport |
+|---|---|---|
+| 543 | `/api/health/ready` | runtime policy (induláskor) |
+| 796 | `/api/sessions/active` | session |
+| 890 | `/api/sessions/start` | session |
+| 922 | `/api/sessions/{id}/stop` | session |
+| 950 | `/api/sessions?limit=50` | session |
+| 965 | `/api/sessions/{id}` | session |
+| 993 | `/api/spectrum/source/status` | spektrum forrás |
+| 1151 | `/api/device-baseline/save` | legacy device-baseline |
+| 1170 | `/api/device-baseline/compare` | legacy device-baseline |
+| 1185 | `/api/device-baseline/deactivate` | legacy device-baseline |
+| 1327 | `/api/kismet/status` | Wi-Fi tab |
+| 1328 | `/api/kismet/import/status` | Wi-Fi tab |
+| 1331 | `/api/wifi/devices` | Wi-Fi tab |
+| 1332 | `/api/wifi/security-events` | Wi-Fi tab |
+| 1333 | `/api/detections` (domain=wifi) | Wi-Fi tab |
+| 1406 | `/api/bettercap/status` | Bluetooth tab |
+| 1407 | `/api/kismet/status` | Bluetooth tab (külön call site) |
+| 1410 | `/api/bluetooth/devices` | Bluetooth tab |
+| 1411 | `/api/detections` (domain=bluetooth) | Bluetooth tab |
+| 1453 | `/api/import/kismet/live` | Kismet import |
+| 1467 | `/api/import/kismet/alerts` | Kismet import |
+| 1588 | `/api/references/bands` | spektrum-referencia rétegek |
+| 1589 | `/api/references/images` | spektrum-referencia rétegek |
+| 1606 | `/nmhh-frequency-allocations.json` | statikus fájl, NEM REST API |
+| 2395 | `/api/reference-sets/capture` | reference-sets |
+| 2446 | `/api/spectrum/peaks` | reference-sets |
+| 2489 | `/api/reference-sets/{id}` | reference-sets (metaResponse) |
+| 2494 | `/api/reference-sets/{id}/spectrum` | reference-sets |
+| 2527 | `/api/reference-sets?...` | reference-sets (lista) |
+| 2550 | `/api/reference-sets/{id}` | reference-sets (kiválasztott betöltése, külön call site) |
+| 2589 | `/api/markers` POST | marker/known-signal CRUD |
+| 2613 | `/api/known-signals` POST | marker/known-signal CRUD |
+| 2628 | `/api/markers?limit=100` + `/api/known-signals?limit=100` | marker/known-signal CRUD (2 fetch egy sorban) |
+| 2633 | `/api/markers/{id}` PATCH | marker/known-signal CRUD (`editMarker`) |
+| 2634 | `/api/markers/{id}` DELETE | marker/known-signal CRUD (`archiveMarker`) |
+| 2635 | `/api/known-signals/{id}` PATCH | marker/known-signal CRUD (`setKnownSignalStatus`) |
+| 2636 | `/api/known-signals/{id}` DELETE | marker/known-signal CRUD (`archiveKnownSignal`) |
+| 3056 | `/api/admin/retention/preview` | admin/retention |
+| 3084 | `/api/admin/retention/purge` | admin/retention |
+| 3194 | `/api/references/import` | legacy spectrum reference import |
+| 3197 | `/api/references/{id}?include_points=true` | legacy spectrum reference import |
+| 3221 | `/api/rf-agent/source/viewport` | RF Agent/SDRangel |
+| 3453 | `/api/rf-agent/sdrangel/demod/update` | RF Agent/SDRangel |
+| 3710 | `/api/rf-agent/sdrangel/readiness` | RF Agent/SDRangel |
+| 3737 | `/api/integrations/sdrangel/devicesets` | RF Agent/SDRangel |
+| 3755 | `/api/rf-agent/sdrangel/tune` | RF Agent/SDRangel |
+| 3765 | `/api/rf-agent/sdrangel/demod/start` | RF Agent/SDRangel |
+| 3797 | `/api/rf-agent/sdrangel/demod/stop` | RF Agent/SDRangel |
+
+### Architektúra döntés (2026-06-24, folytatás): valódi ES modul + window-bridge
+
+A `major_refactor_prompt.pdf` szövege szerint Fázis 1 célja explicit
+**ES module-okra** bontás (`import`/`export`), nem a már meglévő 4
+kiemelt fájl (`demod-passband.js`, `spectrum-frame-adapter.js`,
+`spectrum-view-model.js`, `maxhold-controller.js`) által használt
+UMD/IIFE+`globalThis` mintázat. Mielőtt `api-client.js`-t megírtam
+volna, feltártam egy valódi blocker-t: a `system-tabs.js` (korábban
+kiemelt, `<script src="/system-tabs.js">`, NEM modul) közvetlenül hívja
+a fő inline scriptben deklarált `openOperationModal` és `toastMsg`
+függvényeket (system-tabs.js sor 200, 222, 224, 238, 249, 251) puszta
+azonosítóként. Ez ma azért működik, mert a fő `<script>` classic
+(nem-modul) script, és a benne lévő `function` deklarációk a globális
+objektumra (`window`) kerülnek, így egy később betöltött, ugyancsak
+classic script (`system-tabs.js`) el tudja érni őket. `rag.js`-nek
+nincs ilyen függősége (önállóan működik).
+
+Ha a fő scriptet egyszerűen `type="module"`-ra állítanám, ez a
+függőség némán elszállna (a modul-szintű `function` deklarációk NEM
+kerülnek a globális objektumra) — ReferenceError `system-tabs.js`-ben.
+
+Felhasználói döntés (megkérdezve, jóváhagyva): **valódi ES modul +
+window-bridge**, nem az UMD-mintázat újrahasznosítása. Konkrétan:
+
+1. A fő `<script>` (index.html 392. sor) `<script type="module">`-ra
+   vált.
+2. `toastMsg` és `openOperationModal` definíciója után egy-egy
+   `window.toastMsg = toastMsg;` / `window.openOperationModal =
+   openOperationModal;` sor hidalja át a `system-tabs.js`
+   függőséget — ezt a két függvényt később, a `views/*`/`controllers/*`
+   fázisban kell véglegesen modulra cserélni (akkor a bridge is törölhető).
+3. `python-processor/static/package.json` új fájl, `{"type":"module"}`
+   tartalommal — ez **csak** a Node tooling (`node --check`) ESM/CJS
+   észleléséhez kell, a böngésző viselkedését nem érinti (a böngésző a
+   `<script type="module">` attribútumból dönt, nem a package.json-ból).
+   A meglévő UMD-fájlok szintaktikailag ESM alatt is érvényesek
+   (a `typeof module === 'object'` guard csak futásidejű check, nem
+   szintaxis), úgyhogy ez nem töri el a meglévő `node --check`
+   ellenőrzéseket.
+4. `scripts/offline-acceptance.sh` „frontend inline JavaScript syntax”
+   lépése jelenleg `re.findall(r'<script>(.*?)</script>', ...)`
+   regex-szel keresi a kiemelendő inline scriptet — ez literálisan
+   `<script>`-et vár, attribútum nélkül, tehát `type="module"` után
+   **nem találna semmit** (néma lefedettség-vesztés, nem hibázna). A
+   regexet úgy kell módosítani, hogy `<script type="module">`-t is
+   felismerje, ÉS a kiírt temp fájl kiterjesztését `.mjs`-re kell
+   váltani (`node --check` csak `.mjs` esetén — vagy ha van mellette
+   `package.json` `"type":"module"`-lal — engedi az `import` szintaxist;
+   a `/tmp` ide nem alkalmas, de a `.mjs` kiterjesztés package.json
+   nélkül is működik). `node --check` csak szintaxist ellenőriz, a
+   relatív `import './api/api-client.js'` útvonal fel-nem-oldása ezért
+   nem gond.
+5. Az új `python-processor/static/api/api-client.js` fájlt fel kell
+   venni a `js_syntax_targets` tömbbe is (mint a többi külső statikus
+   JS fájlt) — ez a (3) pont miatti package.json-nal már helyesen
+   ESM-ként lesz ellenőrizve.
+6. `tests/frontend/test_ui_static.py`-ban **4 darab** literál
+   endpoint-substring assert ma az `index.html` tartalmára megy, és
+   ezek a hívások az `api-client.js`-be költöznek:
+   `"/api/wifi/devices" in html`, `"/api/wifi/security-events" in
+   html`, `"/api/import/kismet/alerts" in html`,
+   `"/api/bluetooth/devices" in html` (lásd a fájl ~85-88. sorát). Ezeket
+   át kell írni úgy, hogy az `api-client.js` tartalmát ellenőrizzék —
+   pontosan úgy, ahogy a CSS-kiemelés után a CSS-tartalmú assertek az
+   `app.css`-re kerültek át. A negatív assertek
+   (`"/api/wifi/observations?measurement_session_id" not in html` stb.)
+   nem érintettek, marad `html`-en.
+
+Ez a döntés precedens lesz a hátralévő `state/*` és `controllers/*`
+modulokra is: mindegyik valódi `export`/`import`-ot fog használni, a
+fő script importálja őket, és csak a `system-tabs.js`/`rag.js`-szel
+való érintkezési pontoknál kell hasonló bridge-et mérlegelni (eddig
+csak a fenti kettő azonosítónál van ilyen érintkezés).
+
+### Következő lépés (megszakítva felhasználói kérésre — pontos folytatási checklist)
+
+A munka **itt állt meg, kód még nem módosult** ebben a folytatott
+sessionben (csak feltárás + a fenti döntés történt). A következő
+sessionnek ebben a sorrendben kell haladnia:
+
+1. `python-processor/static/package.json` létrehozása (`{"type":
+   "module"}`).
+2. `python-processor/static/api/api-client.js` megírása: `export class
+   ApiError extends Error` (mezők: `status`, `payload`) + egy
+   alacsony szintű, megosztott `request(url, init)` helper, ami
+   elvégzi a fetch-et és a JSON parse-ot, majd **vagy** visszaadja
+   `{response, payload}`-ot (ha a call site maga dönt `res.ok`
+   alapján — ez a jelenlegi minták többségénél így van), **vagy**
+   dob egy `ApiError`-t a call site által átadott fallback-szöveggel,
+   a jelenlegi `payload.detail?.message || payload.detail ||
+   fallback` mintázat egységesítésével. Minden fenti 49 call site-hoz
+   egy dedikált, névvel ellátott export függvény (pl.
+   `startSession(body)`, `stopSession(id)`, `fetchWifiDevices(params)`
+   stb.) — a pontos lista a fenti táblázat.
+3. Fő `<script>` tag → `type="module"`; `import {...} from
+   './api/api-client.js';` a tetejére; mind a 49 fetch call site
+   átírása az új függvényekre, a call site-specifikus magyar
+   hibaüzenetek/fallback-ek és vezérlési logika **változatlanul**
+   hagyva.
+4. `window.toastMsg = toastMsg;` / `window.openOperationModal =
+   openOperationModal;` bridge bevezetése.
+5. `tests/frontend/test_ui_static.py` 4 assert-jének átírása
+   `api-client.js`-re (lásd fent).
+6. `scripts/offline-acceptance.sh`: regex `<script type="module">`
+   felismerésre bővítése, temp fájl `.mjs` kiterjesztésre váltása,
+   `api-client.js` felvétele a `js_syntax_targets` tömbbe.
+7. Teljes ellenőrzés: `node --check` az új és módosított fájlokon,
+   `tests/frontend/test_ui_static.py`, teljes `pytest`,
+   `scripts/offline-acceptance.sh`, majd a meglévő Playwright
+   smoke-harness (`pw/smoke.js`, lásd fent — scratch venv + Chromium
+   újraindítása szükséges, ezek nem perzisztens állapotok) mind a 8
+   tabra.
+8. Jelentés + memória frissítése, commit.
+
+A live-verifikációs harness (scratch venv + Playwright Chromium)
+**nem perzisztens** — egy korábbi sessionben épült fel a
+`/tmp/.../scratchpad`-ben, ami sessionek között elveszhet; a
+folytatásnál újra kell építeni, ha már nincs ott (lásd a fenti
+„Live-verifikációs infrastruktúra” szakasz pontos parancsait).
