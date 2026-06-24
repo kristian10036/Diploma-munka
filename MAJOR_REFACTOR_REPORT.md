@@ -147,3 +147,89 @@ nélkül”). A három, ebben a fázisban hozzáadott új tesztfájl Ruff-tiszta
   normalizálás mellett döntöttünk) backend API-érintést is jelenthet –
   ellenőrizni kell, hogy ez nem ütközik a Fázis 3 kanonikus
   referencia-domain munkájával.
+
+## Fázis 1 – frontend darabolás (folyamatban, 2026-06-24)
+
+### Live-verifikációs infrastruktúra (új, ismételten felhasználható)
+
+A statikus tesztek (JS syntax, `test_ui_static.py`) nem fognak meg
+canvas-rajzolási vagy állapotkezelési regressziót. Ezért minden további
+modul kiemelése után élő böngészős ellenőrzés készül:
+
+- Scratch venv: `/tmp/.../scratchpad/venv` (uvicorn + a `requirements.txt`
+  pinnelt verziói).
+- Indítás: `APP_MODE=demo AUTH_MODE=disabled LOG_LEVEL=ERROR
+  uvicorn main:app --app-dir python-processor --host 127.0.0.1 --port 8099`
+  (DATABASE_URL nélkül – a hálózati hívások 503-at adnak, ez elvárt és
+  nem hiba).
+- Scratch Node projekt + Playwright Chromium:
+  `/tmp/.../scratchpad/pw` (`npm install playwright@1.61.1`,
+  `npx playwright install chromium` – `--with-deps` nem megy sudo
+  nélkül, de a böngésző bináris önmagában telepíthető és működik).
+- `pw/smoke.js`: minden fő tabra (`spectrum`, `wifi`, `bluetooth`,
+  `rfagent`, `recordings`, `ml`, `rag`, `system` – ld. valódi
+  `data-tab` attribútumok) átkattint, és csak a `pageerror` (nem
+  elkapott kivétel) eseményt tekinti hibának. A `console.error`-t NEM,
+  mert az app szándékosan logolja oda a hálózati/DB hibákat catch
+  ágban (`DATABASE_URL nincs beallitva.` stb.) – ezek a jelenlegi
+  DB nélküli sandboxban várt zaj, nem bug.
+- Baseline (a CSS-kiemelés után, mielőtt bármilyen JS mozgott):
+  **SMOKE PASS: zero JS errors across all tabs.**
+
+### Elkészült: app.css kiemelés
+
+Lásd a `33b4ced` commitot. `index.html`: 4307 → 3883 sor. Pure text
+move, nincs funkcionális változás. `test_ui_static.py` CSS-tartalmú
+assertjei (`grid-template-rows...`, `@media(...)`, stb.) most a
+`app.css`-t ellenőrzik, nem a html-t.
+
+### Inventory a következő lépéshez: api-client.js
+
+A megmaradt ~3460 soros inline `<script>` mélyen összekapcsolt:
+globális mutable state (`viewMin`/`mode`/`cursor`/`drag`/
+`activeMeasurementSession`/`viewedSession`/`staticReference`/stb.) sok
+tucat függvényből írva/olvasva, canvas-rajzolás (`drawSpectrum`,
+`drawWaterfall`, `drawOverview`, markerek) közvetlenül a state-re épül.
+
+A `fetch(` hívások (41 db az inline scriptben, a `system-tabs.js`/
+`rag.js` saját fetch-jei nem számolva ide) helye és funkciója:
+
+- Session kezelés: `/api/sessions/active`, `/start`, `/{id}/stop`,
+  `/api/sessions?limit=50`, `/api/sessions/{id}`.
+- Legacy device-baseline: `/api/device-baseline/save|compare|deactivate`.
+- Kismet/Bettercap/Wi-Fi/Bluetooth: `/api/kismet/status`,
+  `/api/kismet/import/status`, `/api/wifi/devices`,
+  `/api/wifi/security-events`, `/api/detections`,
+  `/api/bettercap/status`, `/api/bluetooth/devices`,
+  `/api/import/kismet/live`, `/api/import/kismet/alerts`.
+- Spektrum-referencia rétegek: `/api/references/bands`,
+  `/api/references/images`, `/nmhh-frequency-allocations.json`
+  (statikus, nem API).
+- Reference-sets: `/api/reference-sets/capture`,
+  `/api/reference-sets/{id}`, `/api/reference-sets/{id}/spectrum`,
+  `/api/reference-sets?...`, `/api/spectrum/peaks`.
+- Marker/known-signal CRUD: `/api/markers` (POST/PATCH/DELETE),
+  `/api/known-signals` (POST/PATCH/DELETE).
+- Admin/retention: `/api/admin/retention/preview|purge`.
+- Legacy spectrum reference import: `/api/references/import`,
+  `/api/references/{id}?include_points=true`.
+- RF Agent/SDRangel: `/api/rf-agent/source/viewport`,
+  `/api/rf-agent/sdrangel/demod/update|start|stop`,
+  `/api/rf-agent/sdrangel/readiness`,
+  `/api/integrations/sdrangel/devicesets`,
+  `/api/rf-agent/sdrangel/tune`.
+
+Minden call site-nak saját, magyar nyelvű hibaüzenete és saját
+fallback-viselkedése van (pl. `payload.detail?.message || payload.detail
+|| 'Session indítás sikertelen'` mintázat, de nem egységes – van
+csendesen elnyelt hiba is, ld. `archiveMarker`). Az `api-client.js`
+kiemelésnek ezt call site-onként kell megőriznie, ezért ez saját,
+külön lépés – nem fért bele ebbe a sessionbe.
+
+### Következő lépés (még nem kezdődött el)
+
+`api/api-client.js` + egységes `ApiError` parser kiemelése mind a 41
+hívásra, call site-onkénti üzenet-megőrzéssel, utána a fenti
+Playwright smoke + `test_ui_static.py` + `ruff` + teljes pytest
+újrafuttatásával. Ezután jöhet a `state/*` store-ok és a
+`controllers/*` rétegek.
