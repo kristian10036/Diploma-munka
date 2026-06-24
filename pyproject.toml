@@ -1,6 +1,6 @@
 [tool.pytest.ini_options]
 minversion = "9.0"
-addopts = "-ra"
+addopts = "-ra -m \"not integration and not hardware and not docker\""
 testpaths = [
   "python-processor/tests",
   "tests",

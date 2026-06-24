@@ -1,0 +1,42 @@
+{
+  "device_baselines": [
+    {
+      "device_name": "Golden AP",
+      "mac_address": "AA:BB:CC:DD:EE:FF",
+      "protocol": "wifi",
+      "stable_identity": "golden-device-1"
+    }
+  ],
+  "manifest": {
+    "exported_at": "FIXED_FOR_GOLDEN_COMPARISON",
+    "schema": "reference_set_export",
+    "version": 1
+  },
+  "reference_set": {
+    "id": "11111111-1111-1111-1111-111111111111",
+    "is_active": true,
+    "location_name": "lab",
+    "name": "Golden fixture reference",
+    "reference_key": "golden_fixture",
+    "status": "ready",
+    "version": 1
+  },
+  "spectrum_points": [
+    {
+      "frequency_hz": 100000000,
+      "power_dbm": -90.0
+    },
+    {
+      "frequency_hz": 101000000,
+      "power_dbm": -88.5
+    }
+  ],
+  "spectrum_reference": {
+    "checksum_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "id": "22222222-2222-2222-2222-222222222222",
+    "is_active": true,
+    "point_count": 2,
+    "reference_key": "golden_fixture",
+    "version": 1
+  }
+}
