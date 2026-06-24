@@ -474,3 +474,269 @@ Wi-Fi/Bluetooth panel, reference-sets, SDRangel/demod). A korábbi
 döntés (valódi ES modul + window-bridge a `toastMsg`/
 `openOperationModal`-hoz) ezekre is érvényes precedens. Ezt a
 darabolást a jelen session nem kezdte el.
+
+### Darabolási stratégia döntés (2026-06-24, Opus 4.8) – inkrementális, precedens-követő
+
+Felhasználói döntés (Opusra váltva, megkérdezve, jóváhagyva): **nem** a
+prompt szó szerinti „3 store + 5 controller" struktúráját erőltetjük rá
+egyszerre, hanem a már bevált, tesztelt `spectrum-view-model.js` /
+`demod-passband.js` precedenst követjük: tiszta, DOM-mentes logikát és
+önálló render-klasztereket emelünk ki ES-modulokba, amelyek a state-et
+**argumentumban kapják**; a megosztott mutable view-state és az
+orchestration az `index.html`-ben marad. Ahol a state-nek tényleg a
+logikájával kell laknia, ott mutált-property objektum-store lesz (nem
+primitív `let`, mert az ES-modul import binding read-only az importáló
+oldalon – `viewMin = x` egy importált bindingre dobna). Egyszerre EGY
+szelet, közte élő verifikációval.
+
+**Indok a literál „store-first" helyett:** a ~181 függvény ~40
+modul-szintű `let`-et ír/olvas közvetlen azonosítóként (a rajzoló forró
+út is: `drawSpectrum`/`drawMarkers` olvassa `viewMin`/`currentSpectrumFrame`/
+`referenceSweep`/`cursor`/`drag`-et és írja `visiblePeak`/`maxPeak`-et).
+A primitív állapot store-ba mozgatása minden hivatkozás átírását
+igényelné (`viewMin` → `view.min`), ami pont a terv 7. szabálya
+(„ne használj globális search/replace refaktort ellenőrzés nélkül")
+ellen menne, nagy regressziós kockázattal a rajzoló úton.
+
+### Elkészült: 1. szelet – observation-format.js (tiszta formázó-helperek)
+
+A legkockázatmentesebb, mindkét stratégia alatt értékes első szelet: a
+Wi-Fi/Bluetooth eszközmegfigyelési táblázatok tiszta (DOM-mentes,
+state-mentes) formázó-/adatkinyerő-helperei kiemelve.
+
+- Új fájl: `python-processor/static/ui/observation-format.js` (valódi ES
+  modul, `export`) + `python-processor/static/ui/package.json`
+  (`{"type":"module"}`, az `api/`-nál tanult scoping-szabály szerint, hogy
+  a `node --check` ESM-ként kezelje, a szülő `static/` UMD-fájljait nem
+  érintve).
+- Kiemelt függvények (12 db, testük **szó szerint változatlan** – egy
+  line-precíz Python splice + bájtra-egyező verifikációval mozgatva):
+  `firstFiniteNumber`, `observationRawPayload`, `rawKismetSignal`,
+  `formatRssiSummary`, `formatAge`, `formatRiskSummary`,
+  `formatManagementSummary`, `formatServiceSummary`, `formatExactTime`,
+  `formatReferenceStatus` (+`REFERENCE_STATUS_GLYPHS` const),
+  `referenceRowClass`, és a `formatUnknownStatus`.
+- **Holt kód megőrizve, nem törölve:** a `formatUnknownStatus` már a
+  kiemelés előtt is használaton kívüli volt az `index.html`-ben (0 hívási
+  hely, csak definíció). Viselkedésmegőrző módon változatlanul áthelyezve
+  és exportálva (a tesztben lefedve), nem törölve – a holtkód-eltávolítás
+  külön, explicit döntés tárgya.
+- **Named import, zéró call-site churn:** az `index.html` namespace-prefix
+  helyett `import { ... } from './ui/observation-format.js'`-t használ, így
+  a hívási helyek bájtra azonosak maradtak; az `index.html` egyetlen
+  változása az import sor + a 12 definíció törlése (3858 → 3757 sor).
+  A 11 ténylegesen hívott név importálva; a két modul-belső
+  (`formatUnknownStatus` holt, `REFERENCE_STATUS_GLYPHS` csak a
+  `formatReferenceStatus` használja) nincs importálva.
+- Ellenőrizve: e nevek sehol máshol nem szerepelnek (sem
+  `system-tabs.js`/`rag.js` classic scriptben – nincs szükség
+  window-bridge-re –, sem más fájlban), így a kiemelés zárt.
+- Új unit teszt: `tests/frontend/test_observation_format.js` (49
+  assertion, a meglévő `require()`-alapú fixture-stílusban; a Node 24
+  `require(esm)` támogatásával tölti be az ES modult). Felvéve a
+  `scripts/offline-acceptance.sh` `js_syntax_targets` tömbjébe és a
+  futtatási listába is.
+- `tests/frontend/test_ui_static.py`: `_parse_static_ui()` mostantól az
+  `observation-format.js` tartalmát is visszaadja; a `formatReferenceStatus`
+  definíciós assert áthelyezve `html`-ről a modul tartalmára
+  (`"export function formatReferenceStatus" in observation_format`). A
+  többi bare-substring assert (`"formatRssiSummary" in html` stb.)
+  változatlan – ezek a megmaradt hívási helyek / import-lista miatt
+  továbbra is igazak.
+
+**Verifikáció (mind PASS):** `node --check` a modulon és az inline
+scripten; az új unit teszt (49 assertion); `scripts/offline-acceptance.sh`
+(0 FAIL, 2 ismert WARN: coverage/ruff nincs telepítve); teljes
+`pytest -q` (132 passed, 8 deselected); élő Playwright smoke mind a 8
+tabon (zero pageerror – ez egyúttal bizonyítja, hogy mind a 11 named
+import feloldódik, különben a modul betöltéskor dobna). A modul
+kiszolgálása élőben ellenőrizve: `GET /ui/observation-format.js` → 200,
+`text/javascript`.
+
+### Elkészült: 2. szelet – html.js (megosztott escapeHtml util)
+
+A view-modulok közös előfeltétele: az `escapeHtml` (79 használat az
+`index.html`-ben, tiszta, classic scriptek NEM használják) kiemelve egy
+önálló, megosztott util-modulba. Külön, minimális szeletként – mert ez a
+zéró-kockázatú, szó szerinti + named-import mozgatás (bevált precedens),
+és minden jövőbeli view-modul (eszközmegfigyelési táblázatok,
+spektrum-popover, retention) erre épül; külön tartva a diff tiszta és
+függetlenül verifikálható marad, mielőtt a magasabb kockázatú
+render-klaszter (3. szelet, függvénytest-átírással) jön.
+
+- Új fájl: `python-processor/static/ui/html.js` (`export function
+  escapeHtml`, test szó szerint változatlan); a `ui/package.json`
+  (1. szeletből) már ESM-ként kezeli.
+- `index.html`: új `import { escapeHtml } from './ui/html.js';` sor, a
+  definíció törölve; a 78 hívási hely **bájtra azonos** (named import).
+- Új unit teszt: `tests/frontend/test_html_util.js` (9 assertion),
+  felvéve a `js_syntax_targets`-be és a futtatási listába.
+- `test_ui_static.py` nem érintett (nem volt `escapeHtml`-definíciós
+  assert benne).
+- **Verifikáció (mind PASS):** `node --check` (modul + inline);
+  `test_html_util.js` (9 assertion); `offline-acceptance.sh` (0 FAIL);
+  teljes `pytest` (132 passed); élő Playwright smoke mind a 8 tabon
+  (zero pageerror); `GET /ui/html.js` → 200.
+
+### Elkészült: 3. szelet – device-observation-view.js (Wi-Fi/BT render-klaszter, pure/impure split)
+
+Az első NEM-szó-szerinti szelet: a Wi-Fi/Bluetooth render-függvények
+pure/impure szétválasztása. A magasabb kockázat miatt a HTML-építő
+template literálokat **script-alapú verbatim kiemeléssel** mozgattam (a
+map-callback testek bájtra azonosak az eredetivel, assertálva), így a
+kimenet konstrukcióból adódóan változatlan.
+
+- Új fájl: `python-processor/static/ui/device-observation-view.js` – 7
+  tiszta HTML-string-építő: `referenceSummaryHtml`,
+  `deviceReferenceDetailsHtml`, `missingReferenceDevicesHtml`,
+  `detectionRowsHtml`, `wifiObservationsHtml`, `wifiSecurityEventsHtml`,
+  `bluetoothObservationsHtml`. Importálja az `escapeHtml`-t (html.js) és a
+  11 format-helpert (observation-format.js); a `WIFI_DETAIL_FIELDS` stb.
+  detail-konstansok ide, modul-privátként költöztek.
+- `index.html`: a 7 render-függvény **vékony wrapperré** vált – a DOM-írás
+  (`*.innerHTML = builder(...)`), a state-Map-ek (`wifiItemsByIdentity`/
+  `bluetoothItemsByIdentity`) és a click-listenerek az `index.html`-ben
+  maradtak; a `renderReferenceSummary` továbbra is itt köti be a
+  toggle-listenert a kiemelt `referenceSummaryHtml` köré. Az
+  `openDetailDialog`/`toastMsg`/`detailDialog` primitívek érintetlenek.
+- **Dead import takarítás:** a 3. szelet után a 11 observation-format
+  helper egyetlen hívási helye sem maradt az `index.html`-ben (mind a
+  view-modulba költözött, ami közvetlenül importálja őket), ezért az
+  `index.html` observation-format importja törölve (a `html.js`
+  escapeHtml import marad: 22 hívási hely). `index.html`: 3757 → 3634 sor.
+- Új unit teszt: `tests/frontend/test_device_observation_view.js` (32
+  assertion – üres állapotok pontos stringként, egy-elemű sorok, XSS-escape,
+  kv-diff/baseline-osztály jelölés, reference-summary darabszámok).
+- `test_ui_static.py`: `_parse_static_ui()` mostantól a
+  `device-observation-view.js`-t is olvassa; a moved formatter-asserteket
+  (`formatRssiSummary`/`formatAge`/`formatExactTime`/`formatRiskSummary`/
+  `formatManagementSummary`/`formatServiceSummary`) `observation_format`-ra,
+  a moved mező-asserteket (`previous_signal_dbm`/`previous_rssi_dbm`)
+  `device_observation_view`-ra helyeztem át; a statikus `<tbody>`
+  üres-állapot markup és a wrapper-függvénynevek (`renderReferenceSummary`/
+  `showMissingReferenceDevices`/`openDeviceReferenceDetails`) asszertjei
+  `html`-en maradtak (változatlanul igazak).
+- **Verifikáció (mind PASS):** `node --check` (modul + inline);
+  `test_device_observation_view.js` (32 assertion); `offline-acceptance.sh`
+  (0 FAIL); teljes `pytest` (132 passed); élő Playwright smoke mind a 8
+  tabon (zero pageerror); **plusz élő böngészős data-path ellenőrzés**:
+  dinamikus `import('/ui/device-observation-view.js')` valós Chromiumban,
+  a builderek valós adattal renderelve (wifi 2437 MHz + escape +
+  row-baseline-new, bt service-uuid + row-baseline-changed, detail kv-table
+  + match meta) – ez kizárja a Node-`require()` vs. böngésző-ESM eltérést.
+  `GET /ui/device-observation-view.js` → 200.
+
+### Mellékesen javítva: migrate konténer exec-bit (2026-06-24)
+
+A `scripts/run-migrations.sh` a munkamenet elején elvesztette a futtatható
+bitjét (`100755 → 100644`, working-tree drift). A `migrate` szolgáltatás
+(compose.yaml) NEM-root `USER backend` (uid 10003) alatt, `read_only`
+rootfs-szel, a bind-mountolt scriptet közvetlenül **entrypoint**-ként
+futtatja – exec-bit nélkül „permission denied". Visszaállítva 755-re
+(`git` 100755-ként követi, ezért checkout-stabil). A script a read_only fs
+alatt is működik (mktemp a `/tmp` tmpfs-re, csak a ro `/migrations`-t
+olvassa). Nincs image-rebuild igény, csak újrafuttatás (`docker compose up
+migrate`).
+
+### Elkészült: 4. szelet – spectrum-scale.js (konstansok + tiszta skála-math)
+
+A „spektrum-tengely store" elemzése egy élesebb megállapítást hozott: a
+`viewMin`/`viewMax` mutábilis nézet-ablaknak **egyetlen írója** van
+(`setView`), és tisztán az `index.html` orchestrationjéhez kötött (a
+`setView` hajtja az `updateReadouts`/`requestDraw`/`scheduleReferenceFetch`-et).
+Objektum-store-rá alakítása 71 `viewMin`/`viewMax` hivatkozás átírását
+jelentené a **rajzoló forró úton**, alacsony strukturális haszonért –
+rossz kockázat/haszon arány. Ezt a részt **szándékosan elhalasztom** (lásd
+lent), és helyette a benne rejlő alacsony-kockázatú, magas-értékű részt
+emeltem ki.
+
+- Új fájl: `python-processor/static/ui/spectrum-scale.js` – a 6 rögzített
+  konstans (`FULL_MIN`, `FULL_MAX`, `NUM_BINS`, `DBM_MIN`, `DBM_MAX`,
+  `MIN_SPAN`) és a 10 TISZTA, viewMin/viewMax-FÜGGETLEN segédfüggvény
+  (`clamp`, `freqToBin`, `binToFreq`, `dbmToY`, `yToDbm`, `fullFreqToX`,
+  `fullXToFreq`, `niceStep`, `formatFreq`, `formatSpan`). Definíciók szó
+  szerint változatlanok, named importtal visszakötve → **zéró call-site
+  churn** (a bevált 1–2. szeletes minta).
+- **STAY az index.html-ben** (viewMin/viewMax-függő, a nézet-ablakra
+  épülnek): `span`, `center`, `freqToX`, `xToFreq`, `formatAxisFreq` – és
+  maga a `viewMin`/`viewMax` + `setView`/`setCenterSpan`/`zoomAt`/`panBy`
+  orchestration.
+- `index.html`: 3634 → 3596 sor. A `clamp` (37 hívás), a konstansok és a
+  formázók mind named importtal, érintetlen hívási helyekkel.
+- A `clamp` ide került (a `freqToBin` használja); a `viewport-controller.js`
+  és `demod-passband.js` saját, lokális `clamp`-et definiál, ezekre nincs
+  hatás.
+- Új unit teszt: `tests/frontend/test_spectrum_scale.js` (44 assertion –
+  konstansok, clamp határok, freqToBin/binToFreq végpontok+clamp,
+  dbmToY/yToDbm inverz, fullFreqToX/fullXToFreq, niceStep, formatFreq/Span).
+- `test_ui_static.py`: `_parse_static_ui()` mostantól a `spectrum-scale.js`-t
+  is olvassa; a `"const FULL_MIN = 0"`/`"const FULL_MAX = 24000"` assert
+  áthelyezve `html`-ről `spectrum_scale`-re (`export const ...`).
+- **Verifikáció (mind PASS):** `node --check`; a 44-assertion unit teszt;
+  `offline-acceptance.sh` (0 FAIL); teljes `pytest` (132 passed); élő
+  Playwright smoke mind a 8 tabon (zero pageerror); **plusz canvas-tartalom
+  ellenőrzés**: demo módban a spektrum-canvas valós sweepeket rajzol, a
+  `getImageData` 27 különböző színt mutat (nem üres) – ez funkcionálisan
+  igazolja, hogy a kiemelt konstansok/transzformációk a rajzoló forró úton
+  helyesen működnek. `GET /ui/spectrum-scale.js` → 200.
+
+### Szándékosan elhalasztva: viewMin/viewMax objektum-store
+
+A nézet-ablak (`viewMin`/`viewMax`) objektum-store-rá alakítása
+(`view.min`/`view.max`) **nem** része ennek a munkának: 71 hivatkozás a
+rajzoló forró úton, egyetlen író (`setView`), és a `setView` mély
+orchestration-kötése (readout/draw/fetch + `toastMsg`) miatt a haszon
+(modul-globális → objektum-property) nem indokolja a kockázatot. Ha mégis
+megtörténik, precíz, scriptelt szó-határos csere + teljes tesztsor +
+demo-canvas vizuális ellenőrzés mellett javasolt.
+
+### Elkészült: 5. szelet – band-popover-view.js (popover HTML-építők)
+
+A 3. szelethez hasonló pure/impure split a spektrum-sáv és NMHH popover
+tartalmára.
+
+- Új fájl: `python-processor/static/ui/band-popover-view.js` – 3 tiszta
+  HTML-építő: `popRow`, `bandPopoverHtml`, `nmhhPopoverHtml` (template
+  literálok script-alapú verbatim kiemeléssel, bájtra azonosak).
+  Importálja az `escapeHtml`-t (html.js) és a `formatFreq`-et
+  (spectrum-scale.js).
+- `index.html`: a `showBandPopover`/`showNmhhPopover` vékony wrapperré vált
+  (`bandPopover.innerHTML = bandPopoverHtml(band); placeBandPopover(...)`);
+  a DOM-pozicionálás (`placeBandPopover`), a hide és a hit-test
+  (`referenceBandAt`/`nmhhBandAt`) az `index.html`-ben maradtak. A `popRow`
+  egyetlen hívója a két builder volt → modul-privát lett (nincs importálva
+  vissza). A `formatFreq` továbbra is importált (14 hívási hely marad).
+  `index.html`: 3596 → 3570 sor.
+- Új unit teszt: `tests/frontend/test_band_popover_view.js` (18 assertion –
+  popRow escape, band frekvencia-formázás/forrás-összefűzés/escape/default
+  mezők, nmhh use-lista escape + üres placeholder).
+- `test_ui_static.py` nem érintett (nem volt popover-tartalmú assert).
+- **Verifikáció (mind PASS):** `node --check`; 18-assertion unit teszt;
+  `offline-acceptance.sh` (0 FAIL); teljes `pytest` (132 passed); élő
+  Playwright smoke (zero pageerror); **plusz élő böngészős data-path**:
+  dinamikus `import('/ui/band-popover-view.js')` valós Chromiumban, a két
+  builder valós sávval renderelve (frekvencia-formázás + escape) PASS.
+  `GET /ui/band-popover-view.js` → 200.
+
+### Összegzés – Fázis 1 frontend modularizáció státusza (5 szelet)
+
+| Szelet | Modul | Jelleg | Unit assert |
+|---|---|---|---|
+| 1 | `ui/observation-format.js` (12 formázó) | verbatim | 49 |
+| 2 | `ui/html.js` (`escapeHtml`) | verbatim | 9 |
+| 3 | `ui/device-observation-view.js` (7 építő) | pure/impure split | 32 |
+| 4 | `ui/spectrum-scale.js` (6 konst + 10 helper) | verbatim | 44 |
+| 5 | `ui/band-popover-view.js` (3 építő) | pure/impure split | 18 |
+
+`index.html`: a `b1abb31` commit óta a `<script>` ~288 sorral rövidebb. 5
+ES-modul, 152 új unit assertion, mind a `node --check` + offline-acceptance
++ 132 pytest + élő Playwright (smoke + canvas-render + data-path) zöld. A
+`viewMin`/`viewMax` store szándékosan elhalasztva (lásd fent).
+
+### Következő lehetséges szeletek (sorrend még nyitott)
+
+(a) a reference store (`referenceBands`/`referenceImages`/`nmhhBands` +
+lekérő/rajzoló logika); (b) a session-controller
+(`activeMeasurementSession`/`viewedSession` + `refreshMeasurementSession`/
+`startMeasurementSession`/stb.); (c) opcionálisan az elhalasztott
+viewMin/viewMax store, ha külön döntés születik róla.

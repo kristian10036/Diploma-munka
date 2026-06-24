@@ -55,10 +55,20 @@ if command -v node >/dev/null 2>&1; then
     python-processor/static/spectrum-frame-adapter.js
     python-processor/static/spectrum-view-model.js
     python-processor/static/system-tabs.js
+    python-processor/static/ui/band-popover-view.js
+    python-processor/static/ui/device-observation-view.js
+    python-processor/static/ui/html.js
+    python-processor/static/ui/observation-format.js
+    python-processor/static/ui/spectrum-scale.js
     python-processor/static/viewport-controller.js
+    tests/frontend/test_band_popover_view.js
     tests/frontend/test_demod_passband.js
+    tests/frontend/test_device_observation_view.js
+    tests/frontend/test_html_util.js
     tests/frontend/test_maxhold_controller.js
+    tests/frontend/test_observation_format.js
     tests/frontend/test_spectrum_model.js
+    tests/frontend/test_spectrum_scale.js
     tests/frontend/test_viewport_controller.js
   )
   node --check "${js_syntax_targets[@]}" && pass "frontend external JavaScript syntax" || fail "frontend external JavaScript syntax"
@@ -66,6 +76,11 @@ if command -v node >/dev/null 2>&1; then
   node tests/frontend/test_maxhold_controller.js >/tmp/dm-maxhold-controller.log 2>&1 && pass "max-hold controller fixtures" || { cat /tmp/dm-maxhold-controller.log; fail "max-hold controller fixtures"; }
   node tests/frontend/test_spectrum_model.js >/tmp/dm-spectrum-model.log 2>&1 && pass "SpectrumFrame/view-model fixtures" || { cat /tmp/dm-spectrum-model.log; fail "SpectrumFrame/view-model fixtures"; }
   node tests/frontend/test_viewport_controller.js >/tmp/dm-viewport-controller.log 2>&1 && pass "viewport controller fixtures" || { cat /tmp/dm-viewport-controller.log; fail "viewport controller fixtures"; }
+  node tests/frontend/test_observation_format.js >/tmp/dm-observation-format.log 2>&1 && pass "observation format fixtures" || { cat /tmp/dm-observation-format.log; fail "observation format fixtures"; }
+  node tests/frontend/test_html_util.js >/tmp/dm-html-util.log 2>&1 && pass "html util fixtures" || { cat /tmp/dm-html-util.log; fail "html util fixtures"; }
+  node tests/frontend/test_device_observation_view.js >/tmp/dm-device-observation-view.log 2>&1 && pass "device observation view fixtures" || { cat /tmp/dm-device-observation-view.log; fail "device observation view fixtures"; }
+  node tests/frontend/test_spectrum_scale.js >/tmp/dm-spectrum-scale.log 2>&1 && pass "spectrum scale fixtures" || { cat /tmp/dm-spectrum-scale.log; fail "spectrum scale fixtures"; }
+  node tests/frontend/test_band_popover_view.js >/tmp/dm-band-popover-view.log 2>&1 && pass "band popover view fixtures" || { cat /tmp/dm-band-popover-view.log; fail "band popover view fixtures"; }
   python - <<'PY' && pass "frontend inline JavaScript syntax" || fail "frontend inline JavaScript syntax"
 from pathlib import Path
 import re, subprocess, tempfile
