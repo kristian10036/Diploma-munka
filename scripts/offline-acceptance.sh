@@ -48,6 +48,7 @@ fi
 
 if command -v node >/dev/null 2>&1; then
   js_syntax_targets=(
+    python-processor/static/api/api-client.js
     python-processor/static/demod-passband.js
     python-processor/static/maxhold-controller.js
     python-processor/static/rag.js
@@ -69,8 +70,8 @@ if command -v node >/dev/null 2>&1; then
 from pathlib import Path
 import re, subprocess, tempfile
 text=Path('python-processor/static/index.html').read_text(encoding='utf-8')
-for index, script in enumerate(re.findall(r'<script>(.*?)</script>', text, re.S)):
-    path=Path(tempfile.gettempdir())/f'dm-inline-{index}.js'
+for index, script in enumerate(re.findall(r'<script(?: type="module")?>(.*?)</script>', text, re.S)):
+    path=Path(tempfile.gettempdir())/f'dm-inline-{index}.mjs'
     path.write_text(script, encoding='utf-8')
     subprocess.run(['node','--check',str(path)],check=True)
 PY

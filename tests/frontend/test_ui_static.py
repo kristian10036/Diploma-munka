@@ -39,18 +39,19 @@ class UiParser(HTMLParser):
             self._group = False
 
 
-def _parse_static_ui() -> tuple[str, str, UiParser]:
+def _parse_static_ui() -> tuple[str, str, str, UiParser]:
     root = Path(__file__).resolve().parents[2]
     html = (root / "python-processor/static/index.html").read_text(encoding="utf-8")
     css = (root / "python-processor/static/app.css").read_text(encoding="utf-8")
+    api_client = (root / "python-processor/static/api/api-client.js").read_text(encoding="utf-8")
     parser = UiParser()
     parser.feed(html)
-    return html, css, parser
+    return html, css, api_client, parser
 
 
 @pytest.mark.unit
 def test_static_ui_contract() -> None:
-    html, css, parser = _parse_static_ui()
+    html, css, api_client, parser = _parse_static_ui()
 
     tabs = [button["text"] for button in parser.buttons if button["tab"]]
     assert tabs == ["Spektrum", "Wi-Fi", "Bluetooth / BLE", "RF Agent", "Felvételek", "ML osztályozás", "RAG", "Rendszerállapot"]
@@ -90,10 +91,10 @@ def test_static_ui_contract() -> None:
     assert '<th>Service / profile</th>' in html
     assert '<tbody id="bluetoothObservationRows"><tr><td colspan="11">Nincs Bluetooth adat.</td></tr></tbody>' in html
     assert "item.source_name || item.source_type" not in html
-    assert "/api/wifi/devices" in html
-    assert "/api/wifi/security-events" in html
-    assert "/api/import/kismet/alerts" in html
-    assert "/api/bluetooth/devices" in html
+    assert "/api/wifi/devices" in api_client
+    assert "/api/wifi/security-events" in api_client
+    assert "/api/import/kismet/alerts" in api_client
+    assert "/api/bluetooth/devices" in api_client
     assert "/api/wifi/observations?measurement_session_id" not in html
     assert "/api/bluetooth/observations?measurement_session_id" not in html
     assert "formatRssiSummary" in html

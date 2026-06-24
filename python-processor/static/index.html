@@ -389,8 +389,10 @@
   </dialog>
   <div class="toast" id="toast"></div>
 
-<script>
+<script type="module">
 'use strict';
+
+import * as apiClient from './api/api-client.js';
 
 // -----------------------------------------------------------------------------
 // CONFIG
@@ -540,7 +542,7 @@ const waterfallPanelStorageKey = 'waterfallPanelCollapsed';
 
 async function loadRuntimePolicy(){
   try{
-    const response = await fetch('/api/health/ready', {cache:'no-store'});
+    const response = await apiClient.fetchRuntimeReadiness();
     if (response.ok) {
       const payload = await response.json();
       if (payload && typeof payload === 'object' && 'synthetic_fallback_allowed' in payload) {
@@ -724,6 +726,7 @@ function toastMsg(msg){
   clearTimeout(toast._t);
   toast._t = setTimeout(() => toast.classList.remove('show'), 1400);
 }
+window.toastMsg = toastMsg;
 function openOperationModal({title,submitLabel='Mentés',fields}){
   return new Promise(resolve=>{
     operationDialogTitle.textContent=title;
@@ -769,6 +772,7 @@ function openOperationModal({title,submitLabel='Mentés',fields}){
     operationFields.querySelector('input')?.focus();
   });
 }
+window.openOperationModal = openOperationModal;
 function activateTab(tabName){
   if (!tabPages.some(page => page.dataset.tab === tabName)) return;
   activeTab = tabName;
@@ -793,7 +797,7 @@ function activateTab(tabName){
 }
 async function discoverActiveMeasurementSession(locationName){
   const query = locationName ? `?location_name=${encodeURIComponent(locationName)}` : '';
-  const res = await fetch(`/api/sessions/active${query}`);
+  const res = await apiClient.fetchActiveSession(query);
   const payload = await res.json();
   if (!res.ok) throw new Error(payload.detail || 'Session frissítés sikertelen');
   return payload.items?.[0] || null;
@@ -887,15 +891,11 @@ async function startMeasurementSession(){
     return;
   }
   try {
-    const res = await fetch('/api/sessions/start', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        location_name: locationName,
-        operator_name: sessionOperatorInput.value.trim() || null,
-        notes: sessionNotesInput.value.trim() || null,
-        environment_description: null
-      })
+    const res = await apiClient.startSession({
+      location_name: locationName,
+      operator_name: sessionOperatorInput.value.trim() || null,
+      notes: sessionNotesInput.value.trim() || null,
+      environment_description: null
     });
     const payload = await res.json();
     if (!res.ok) {
@@ -919,7 +919,7 @@ async function stopMeasurementSession(){
     return;
   }
   try {
-    const res = await fetch(`/api/sessions/${encodeURIComponent(activeMeasurementSession.id)}/stop`, {method:'POST'});
+    const res = await apiClient.stopSession(activeMeasurementSession.id);
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.detail || 'Session leállítás sikertelen');
     renderMeasurementSession(null);
@@ -947,7 +947,7 @@ async function startSessionFromModal(){
 }
 async function openPreviousSessionPicker(){
   try {
-    const response = await fetch('/api/sessions?limit=50');
+    const response = await apiClient.fetchRecentSessions();
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || 'Session lista betöltési hiba');
     const items = Array.isArray(payload.items) ? payload.items : [];
@@ -962,7 +962,7 @@ async function openPreviousSessionPicker(){
       }))},
     ]});
     if (!form) return;
-    const sessionResponse = await fetch(`/api/sessions/${encodeURIComponent(form.sessionId)}`);
+    const sessionResponse = await apiClient.fetchSessionById(form.sessionId);
     const session = await sessionResponse.json();
     if (!sessionResponse.ok) throw new Error(session.detail || 'Session betöltési hiba');
     setViewedSession(session, {readOnly: session.status !== 'active'});
@@ -990,7 +990,7 @@ function renderSpectrumSourceStatus(source){
 }
 async function refreshSpectrumSourceStatus(showToast=false){
   try {
-    const res = await fetch('/api/spectrum/source/status');
+    const res = await apiClient.fetchSpectrumSourceStatus();
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.detail || 'Forrásállapot lekérése sikertelen');
     renderSpectrumSourceStatus(payload);
@@ -1148,10 +1148,7 @@ async function saveDeviceBaseline(protocol){
   const locationName = await resolveBaselineLocationName('Helyiség referencia mentése');
   if (!locationName) return;
   try {
-    const res = await fetch('/api/device-baseline/save', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({protocol, location_name:locationName, measurement_session_id:activeMeasurementSession?.id||null}),
-    });
+    const res = await apiClient.saveDeviceBaseline({protocol, location_name:locationName, measurement_session_id:activeMeasurementSession?.id||null});
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.detail || 'Referencia mentése sikertelen');
     toastMsg(`Referencia mentve (${protocol}): ${payload.saved_entries} eszköz, v${payload.version}`);
@@ -1167,7 +1164,7 @@ async function compareDeviceBaseline(protocol){
   try {
     const params = new URLSearchParams({protocol, location_name:locationName});
     if (activeMeasurementSession?.id) params.set('measurement_session_id', activeMeasurementSession.id);
-    const res = await fetch(`/api/device-baseline/compare?${params.toString()}`);
+    const res = await apiClient.compareDeviceBaseline(params);
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.detail || 'Összehasonlítás sikertelen');
     const s = payload.summary || {};
@@ -1182,10 +1179,7 @@ async function deactivateDeviceBaseline(protocol){
   const locationName = await resolveBaselineLocationName('Referencia deaktiválása');
   if (!locationName) return;
   try {
-    const res = await fetch('/api/device-baseline/deactivate', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({protocol, location_name:locationName}),
-    });
+    const res = await apiClient.deactivateDeviceBaseline({protocol, location_name:locationName});
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.detail || 'Referencia deaktiválása sikertelen');
     toastMsg(`Referencia deaktiválva (${protocol}): ${payload.deactivated_entries} bejegyzés`);
@@ -1324,13 +1318,13 @@ async function refreshWifiPanel(showToast=false){
     return;
   }
   try {
-    const statusPromise = fetch('/api/kismet/status').then(async res => ({ok:res.ok, payload:await res.json()}));
-    const importStatusPromise = fetch('/api/kismet/import/status').then(async res => ({ok:res.ok, payload:await res.json()}));
+    const statusPromise = apiClient.fetchKismetStatus().then(async res => ({ok:res.ok, payload:await res.json()}));
+    const importStatusPromise = apiClient.fetchKismetImportStatus().then(async res => ({ok:res.ok, payload:await res.json()}));
     const wifiParams = new URLSearchParams({limit:'50', measurement_session_id: viewedSession.id, require_session:'true'});
     if (selectedReferenceSetId) wifiParams.set('reference_set_id', selectedReferenceSetId);
-    const observationPromise = fetch(`/api/wifi/devices?${wifiParams.toString()}`).then(async res => ({ok:res.ok, payload:await res.json()}));
-    const securityEventsPromise = fetch(`/api/wifi/security-events?${new URLSearchParams({limit:'25', measurement_session_id: viewedSession.id})}`).then(async res => ({ok:res.ok, payload:await res.json()}));
-    const anomalyPromise = fetch(`/api/detections?${new URLSearchParams({domain:'wifi', limit:'25', measurement_session_id: viewedSession.id})}`).then(async res => ({ok:res.ok, payload:await res.json()}));
+    const observationPromise = apiClient.fetchWifiDevices(wifiParams).then(async res => ({ok:res.ok, payload:await res.json()}));
+    const securityEventsPromise = apiClient.fetchWifiSecurityEvents(new URLSearchParams({limit:'25', measurement_session_id: viewedSession.id})).then(async res => ({ok:res.ok, payload:await res.json()}));
+    const anomalyPromise = apiClient.fetchDetections(new URLSearchParams({domain:'wifi', limit:'25', measurement_session_id: viewedSession.id})).then(async res => ({ok:res.ok, payload:await res.json()}));
     const [statusResult, importStatusResult, observationResult, securityEventsResult, anomalyResult] = await Promise.all([statusPromise, importStatusPromise, observationPromise, securityEventsPromise, anomalyPromise]);
     if (!statusResult.ok) throw new Error(statusResult.payload.detail || 'Kismet státuszhiba');
     if (!importStatusResult.ok) throw new Error(importStatusResult.payload.detail || 'Kismet import státuszhiba');
@@ -1403,12 +1397,12 @@ async function refreshBluetoothPanel(showToast=false){
     return;
   }
   try {
-    const statusPromise = fetch('/api/bettercap/status').then(async res => ({ok:res.ok, payload:await res.json()}));
-    const kismetStatusPromise = fetch('/api/kismet/status').then(async res => ({ok:res.ok, payload:await res.json()}));
+    const statusPromise = apiClient.fetchBettercapStatus().then(async res => ({ok:res.ok, payload:await res.json()}));
+    const kismetStatusPromise = apiClient.fetchKismetStatus().then(async res => ({ok:res.ok, payload:await res.json()}));
     const bluetoothParams = new URLSearchParams({limit:'50', measurement_session_id: viewedSession.id, require_session:'true'});
     if (selectedReferenceSetId) bluetoothParams.set('reference_set_id', selectedReferenceSetId);
-    const observationPromise = fetch(`/api/bluetooth/devices?${bluetoothParams.toString()}`).then(async res => ({ok:res.ok, payload:await res.json()}));
-    const anomalyPromise = fetch(`/api/detections?${new URLSearchParams({domain:'bluetooth', limit:'25', measurement_session_id: viewedSession.id})}`).then(async res => ({ok:res.ok, payload:await res.json()}));
+    const observationPromise = apiClient.fetchBluetoothDevices(bluetoothParams).then(async res => ({ok:res.ok, payload:await res.json()}));
+    const anomalyPromise = apiClient.fetchDetections(new URLSearchParams({domain:'bluetooth', limit:'25', measurement_session_id: viewedSession.id})).then(async res => ({ok:res.ok, payload:await res.json()}));
     const [statusResult, kismetStatusResult, observationResult, anomalyResult] = await Promise.all([statusPromise, kismetStatusPromise, observationPromise, anomalyPromise]);
     if (!statusResult.ok) throw new Error(statusResult.payload.detail || 'Bettercap státuszhiba');
     if (!observationResult.ok) throw new Error(observationResult.payload.detail || 'Bluetooth lekérdezési hiba');
@@ -1450,7 +1444,7 @@ async function importKismetLive(){
     form.append('allow_without_session', 'true');
   }
   try {
-    const res = await fetch('/api/import/kismet/live', {method:'POST', body:form});
+    const res = await apiClient.importKismetLive(form);
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.detail || 'Kismet live import sikertelen');
     await Promise.all([refreshWifiPanel(false), refreshBluetoothPanel(false)]);
@@ -1464,7 +1458,7 @@ async function importKismetAlerts(){
   try {
     const params = new URLSearchParams();
     if (activeMeasurementSession?.id) params.set('measurement_session_id', activeMeasurementSession.id);
-    const res = await fetch(`/api/import/kismet/alerts?${params.toString()}`, { method:'POST' });
+    const res = await apiClient.importKismetAlerts(params);
     const payload = await res.json().catch(()=>({}));
     if (!res.ok) throw new Error(payload.detail || 'Kismet alert import sikertelen');
     toastMsg(`Kismet alert import: ${payload.imported_alerts || 0} esemény`);
@@ -1585,8 +1579,8 @@ async function fetchReferenceLayers(){
   const params = referenceQueryParams();
   try {
     const [bandsRes, imagesRes] = await Promise.all([
-      fetch(`/api/references/bands?${params.toString()}`),
-      fetch(`/api/references/images?${params.toString()}`)
+      apiClient.fetchReferenceBands(params),
+      apiClient.fetchReferenceImages(params)
     ]);
     if (bandsRes.ok) {
       const payload = await bandsRes.json();
@@ -1603,7 +1597,7 @@ async function fetchReferenceLayers(){
 }
 async function loadNmhhBands(){
   try {
-    const response=await fetch('/nmhh-frequency-allocations.json',{cache:'no-cache'});
+    const response=await apiClient.fetchNmhhAllocations();
     if(!response.ok)throw new Error(`HTTP ${response.status}`);
     const payload=await response.json();
     nmhhBands=Array.isArray(payload.bands)?payload.bands:[];
@@ -2392,27 +2386,23 @@ async function saveCurrentViewReference(){
     return;
   }
   try {
-    const res = await fetch('/api/reference-sets/capture', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        name: form.name.trim(),
-        reference_key: referenceId,
-        location_name: locationName,
-        measurement_session_id: activeMeasurementSession?.id || null,
-        operator_name: form.operatorName.trim() || null,
-        notes: form.notes.trim() || null,
-        spectrum_reference_kind: staticReference.kind,
-        spectrum_points: points,
-        spectrum_metadata: {
-          source: 'spectrum_monitor',
-          device_name: currentSpectrumFrame?.deviceModel || currentSpectrumFrame?.sourceDevice || 'spectrum_monitor_live',
-          frame_count: staticReference.kind === 'max_hold' ? null : 1
-        },
-        include_wifi: form.includeWifi === 'true',
-        include_bluetooth: form.includeBluetooth === 'true',
-        activate: form.activate === 'true'
-      })
+    const res = await apiClient.captureReferenceSet({
+      name: form.name.trim(),
+      reference_key: referenceId,
+      location_name: locationName,
+      measurement_session_id: activeMeasurementSession?.id || null,
+      operator_name: form.operatorName.trim() || null,
+      notes: form.notes.trim() || null,
+      spectrum_reference_kind: staticReference.kind,
+      spectrum_points: points,
+      spectrum_metadata: {
+        source: 'spectrum_monitor',
+        device_name: currentSpectrumFrame?.deviceModel || currentSpectrumFrame?.sourceDevice || 'spectrum_monitor_live',
+        frame_count: staticReference.kind === 'max_hold' ? null : 1
+      },
+      include_wifi: form.includeWifi === 'true',
+      include_bluetooth: form.includeBluetooth === 'true',
+      activate: form.activate === 'true'
     });
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.detail || 'Referencia mentes sikertelen');
@@ -2443,22 +2433,18 @@ async function saveMaxPeak(){
   const locationName=form.locationName.trim();
   localStorage.setItem('tscm_last_location_name', locationName);
   try {
-    const res = await fetch('/api/spectrum/peaks', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        location_name: locationName,
-        peak_type: 'max_peak',
-        frequency_mhz: maxPeak.freq,
-        power_dbm: Number(maxPeak.dbm.toFixed(2)),
-        metadata: {
-          view_min_mhz: viewMin,
-          view_max_mhz: viewMax,
-          saved_from: 'spectrum_monitor',
-          layer_type: 'max_peak',
-          display_color: '#ff9800'
-        }
-      })
+    const res = await apiClient.saveSpectrumPeak({
+      location_name: locationName,
+      peak_type: 'max_peak',
+      frequency_mhz: maxPeak.freq,
+      power_dbm: Number(maxPeak.dbm.toFixed(2)),
+      metadata: {
+        view_min_mhz: viewMin,
+        view_max_mhz: viewMax,
+        saved_from: 'spectrum_monitor',
+        layer_type: 'max_peak',
+        display_color: '#ff9800'
+      }
     });
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.detail || 'Peak mentes sikertelen');
@@ -2486,12 +2472,12 @@ function renderReferenceBar(){
   referenceBarBluetooth.textContent = `Bluetooth ${components.bluetooth_baseline_count ? '✓' : '—'}`;
 }
 async function selectReferenceSet(referenceSetId){
-  const metaResponse = await fetch(`/api/reference-sets/${referenceSetId}`);
+  const metaResponse = await apiClient.fetchReferenceSetMeta(referenceSetId);
   const meta = await metaResponse.json();
   if (!metaResponse.ok) throw new Error(meta.detail || 'Referencia metaadat betöltési hiba');
   const hasSpectrum = Array.isArray(meta.components?.spectrum) && meta.components.spectrum.length > 0;
   if (hasSpectrum) {
-    const spectrumResponse = await fetch(`/api/reference-sets/${referenceSetId}/spectrum`);
+    const spectrumResponse = await apiClient.fetchReferenceSetSpectrum(referenceSetId);
     const spectrum = await spectrumResponse.json();
     const points = spectrumResponse.ok && Array.isArray(spectrum.items) ? spectrum.items : [];
     if (points.length) {
@@ -2524,7 +2510,7 @@ async function openReferenceSetPicker(){
   const locationName = localStorage.getItem('tscm_last_location_name') || sessionLocationInput?.value || '';
   const params = new URLSearchParams({limit:'100'});
   if (locationName.trim()) params.set('location_name', locationName.trim());
-  const response = await fetch(`/api/reference-sets?${params.toString()}`);
+  const response = await apiClient.fetchReferenceSets(params);
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.detail || 'Referencia lista betöltési hiba');
   const items = Array.isArray(payload.items) ? payload.items : [];
@@ -2547,7 +2533,7 @@ async function openReferenceBarDetails(){
     return;
   }
   try {
-    const response = await fetch(`/api/reference-sets/${selectedReferenceSetId}`);
+    const response = await apiClient.fetchReferenceSetMeta(selectedReferenceSetId);
     const meta = await response.json();
     if (!response.ok) throw new Error(meta.detail || 'Referencia részletek betöltési hiba');
     const rows = [
@@ -2586,12 +2572,12 @@ async function saveMarkerAt(frequencyMhz){
     {name:'color',label:'Szín (CSS/hex)',value:'#40c4ff',maxLength:32}
   ]});
   if(!form)return;
-  const response=await fetch('/api/markers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+  const response=await apiClient.createMarker({
     measurement_session_id:activeMeasurementSession?.id||null,frequency_hz:Math.round(frequencyMhz*1e6),
     power_dbm:Number.isFinite(sampleAtFreq(frequencyMhz))?sampleAtFreq(frequencyMhz):null,
     label:form.label.trim(),notes:form.notes.trim()||null,category:form.category.trim()||null,color:form.color.trim()||null,
     metadata:{source:'spectrum_ui',frame_sequence:currentSpectrumFrame?.sequence??null}
-  })});
+  });
   if(!response.ok)throw new Error(`Marker mentési hiba: ${response.status}`);
   await refreshSpectrumEntities();toastMsg('Marker mentve');
 }
@@ -2610,14 +2596,14 @@ async function saveKnownSignalAt(frequencyMhz,suppressAlerts=false){
   ]});
   if(!form)return;
   const optionalNumber=value=>value===''?null:Number(value);
-  const response=await fetch('/api/known-signals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+  const response=await apiClient.createKnownSignal({
     measurement_session_id:activeMeasurementSession?.id||null,center_frequency_hz:Math.round(frequencyMhz*1e6),
     frequency_tolerance_hz:Number(form.toleranceHz),bandwidth_hz:optionalNumber(form.bandwidthHz),
     expected_power_min_dbm:optionalNumber(form.powerMin),expected_power_max_dbm:optionalNumber(form.powerMax),
     modulation:form.modulation.trim()||null,protocol:form.protocol.trim()||null,source_type:currentSpectrumFrame?.sourceType||null,
     label:form.label.trim(),notes:form.notes.trim()||null,suppress_alerts:suppressAlerts,
     metadata:{source:'spectrum_ui',is_simulated:currentSpectrumFrame?.metadata?.is_simulated??null}
-  })});
+  });
   if(!response.ok)throw new Error(`Ismert jel mentési hiba: ${response.status}`);
   await refreshSpectrumEntities();toastMsg('Ismert jel mentve');
 }
@@ -2625,15 +2611,15 @@ async function saveKnownSignalAt(frequencyMhz,suppressAlerts=false){
 function entityAction(label,handler){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',handler);return button;}
 async function refreshSpectrumEntities(){
   try{
-    const [markersResponse,signalsResponse]=await Promise.all([fetch('/api/markers?limit=100'),fetch('/api/known-signals?limit=100')]);
+    const [markersResponse,signalsResponse]=await Promise.all([apiClient.fetchMarkers(),apiClient.fetchKnownSignals()]);
     if(markersResponse.ok){const payload=await markersResponse.json();markerRows.replaceChildren();for(const marker of payload.items){const row=document.createElement('tr');for(const text of [marker.label,formatFreq(Number(marker.frequency_hz)/1e6),marker.category||'--']){const cell=document.createElement('td');cell.textContent=text;row.append(cell);}const actions=document.createElement('td');actions.className='entity-actions';actions.append(entityAction('Ugrás',()=>{markerFreq=Number(marker.frequency_hz)/1e6;setCenterSpan(markerFreq,Math.min(span(),10),'Markerre ugrás');}),entityAction('Szerkesztés',()=>editMarker(marker)),entityAction('Archiválás',()=>archiveMarker(marker)));row.append(actions);markerRows.append(row);}if(!payload.items.length)markerRows.innerHTML='<tr><td colspan="4">Nincs marker.</td></tr>';}
     if(signalsResponse.ok){const payload=await signalsResponse.json();knownSignalRows.replaceChildren();for(const signal of payload.items){const row=document.createElement('tr');for(const text of [signal.label,`${formatFreq(Number(signal.center_frequency_hz)/1e6)} ± ${signal.frequency_tolerance_hz} Hz`,signal.status]){const cell=document.createElement('td');cell.textContent=text;row.append(cell);}const actions=document.createElement('td');actions.className='entity-actions';actions.append(entityAction('Ugrás',()=>setCenterSpan(Number(signal.center_frequency_hz)/1e6,Math.min(span(),10),'Ismert jelre ugrás')),entityAction(signal.status==='active'?'Letiltás':'Aktiválás',()=>setKnownSignalStatus(signal,signal.status==='active'?'disabled':'active')),entityAction('Archiválás',()=>archiveKnownSignal(signal)));row.append(actions);knownSignalRows.append(row);}if(!payload.items.length)knownSignalRows.innerHTML='<tr><td colspan="4">Nincs ismert jel.</td></tr>';}
   }catch(error){console.warn('Marker/ismert jel lista hiba',error);}
 }
-async function editMarker(marker){const form=await openOperationModal({title:'Marker szerkesztése',fields:[{name:'label',label:'Címke',value:marker.label,required:true,maxLength:200},{name:'notes',label:'Megjegyzés',value:marker.notes||'',maxLength:1000},{name:'category',label:'Kategória',value:marker.category||'',maxLength:100},{name:'color',label:'Szín',value:marker.color||'',maxLength:32}]});if(!form)return;await fetch(`/api/markers/${marker.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});await refreshSpectrumEntities();}
-async function archiveMarker(marker){const confirmed=await openOperationModal({title:`Marker archiválása: ${marker.label}`,submitLabel:'Archiválás',fields:[]});if(!confirmed)return;await fetch(`/api/markers/${marker.id}`,{method:'DELETE'});await refreshSpectrumEntities();}
-async function setKnownSignalStatus(signal,status){await fetch(`/api/known-signals/${signal.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});await refreshSpectrumEntities();}
-async function archiveKnownSignal(signal){const confirmed=await openOperationModal({title:`Ismert jel archiválása: ${signal.label}`,submitLabel:'Archiválás',fields:[]});if(!confirmed)return;await fetch(`/api/known-signals/${signal.id}`,{method:'DELETE'});await refreshSpectrumEntities();}
+async function editMarker(marker){const form=await openOperationModal({title:'Marker szerkesztése',fields:[{name:'label',label:'Címke',value:marker.label,required:true,maxLength:200},{name:'notes',label:'Megjegyzés',value:marker.notes||'',maxLength:1000},{name:'category',label:'Kategória',value:marker.category||'',maxLength:100},{name:'color',label:'Szín',value:marker.color||'',maxLength:32}]});if(!form)return;await apiClient.updateMarker(marker.id,form);await refreshSpectrumEntities();}
+async function archiveMarker(marker){const confirmed=await openOperationModal({title:`Marker archiválása: ${marker.label}`,submitLabel:'Archiválás',fields:[]});if(!confirmed)return;await apiClient.deleteMarker(marker.id);await refreshSpectrumEntities();}
+async function setKnownSignalStatus(signal,status){await apiClient.updateKnownSignalStatus(signal.id,{status});await refreshSpectrumEntities();}
+async function archiveKnownSignal(signal){const confirmed=await openOperationModal({title:`Ismert jel archiválása: ${signal.label}`,submitLabel:'Archiválás',fields:[]});if(!confirmed)return;await apiClient.deleteKnownSignal(signal.id);await refreshSpectrumEntities();}
 function clearReference(){
   referenceSweep = new Float32Array(NUM_BINS).fill(NaN);
   hasReference = false;
@@ -3053,7 +3039,7 @@ btnRetentionPreview.addEventListener('click', async ()=>{
   const olderThan = new Date(`${dateValue}T00:00:00Z`).toISOString();
   retentionResetPreview();
   try {
-    const response = await fetch(`/api/admin/retention/preview?dataset=${encodeURIComponent(dataset)}&older_than=${encodeURIComponent(olderThan)}`);
+    const response = await apiClient.fetchRetentionPreview(dataset, olderThan);
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || 'Előnézeti hiba');
     retentionPreviewResult.textContent = payload.row_count > 0
@@ -3081,10 +3067,7 @@ btnRetentionPurge.addEventListener('click', async ()=>{
   if (!form) return;
   if (form.confirmPhrase.trim().toUpperCase() !== 'TÖRLÉS') { toastMsg('A megerősítő szó nem egyezett, törlés megszakítva'); return; }
   try {
-    const response = await fetch('/api/admin/retention/purge', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({dataset, older_than: olderThan, confirm:true}),
-    });
+    const response = await apiClient.purgeRetention({dataset, older_than: olderThan, confirm:true});
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || 'Törlési hiba');
     toastMsg(`Törölve: ${payload.dropped_chunks} TimescaleDB chunk (${dataset}).`);
@@ -3191,10 +3174,10 @@ referenceFile.addEventListener('change', async (e)=>{
     ]});
     if(!form)return;
     const body=new FormData();body.append('file',file);body.append('reference_key',form.referenceKey.trim());body.append('location_name',form.locationName.trim());body.append('device_name',form.deviceName.trim());body.append('notes',form.notes.trim());body.append('activate','true');
-    const response=await fetch('/api/references/import',{method:'POST',body});
+    const response=await apiClient.importReferenceFile(body);
     const payload=await response.json();
     if(!response.ok){const detail=payload.detail||{};throw new Error(detail.code==='unsupported_peak_format'?'A .peak formátum nem dokumentált. Exportálj CSV-t az OSCOR Data Viewerből.':detail.message||'Referencia import hiba');}
-    const detailResponse=await fetch(`/api/references/${payload.id}?include_points=true`);const detail=await detailResponse.json();
+    const detailResponse=await apiClient.fetchReferenceDetail(payload.id);const detail=await detailResponse.json();
     const normalized=normalizeIncoming(detail.points.map(point=>({freq:Number(point.frequency_hz)/1e6,dbm:Number(point.power_dbm)})));
     setReferenceFromSweep(normalized,`Referencia importálva: ${payload.reference_key} v${payload.version}`);
   } catch (err) {
@@ -3218,16 +3201,12 @@ document.getElementById('btnApply').addEventListener('click', async ()=>{
   const requestId = `frontend-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   try {
-    const response = await fetch('/api/rf-agent/source/viewport', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        request_id:requestId,
-        mode:'sweep',
-        center_frequency_hz:centerHz,
-        span_hz:spanHz,
-        maximum_points:NUM_BINS
-      })
+    const response = await apiClient.updateRfAgentViewport({
+      request_id:requestId,
+      mode:'sweep',
+      center_frequency_hz:centerHz,
+      span_hz:spanHz,
+      maximum_points:NUM_BINS
     });
     const payload = await response.json();
     if (!response.ok) {
@@ -3450,11 +3429,7 @@ const demodUpdateScheduler = DemodPassband.createUpdateScheduler({
   scheduler: { setTimeout: window.setTimeout.bind(window), clearTimeout: window.clearTimeout.bind(window) },
   debounceMs: 150,
   send: async (payload, seq) => {
-    const response = await fetch('/api/rf-agent/sdrangel/demod/update', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const response = await apiClient.updateSdrangelDemod(payload);
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       const detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body);
@@ -3707,7 +3682,7 @@ async function refreshSdrangelReadiness(){
   const status=document.getElementById('sdrangelDemodStatus');
   const startButton=document.getElementById('btnSdrangelStart');
   try{
-    const response=await fetch('/api/rf-agent/sdrangel/readiness');
+    const response=await apiClient.fetchSdrangelReadiness();
     const payload=await response.json();
     if(!response.ok)throw new Error(payload.detail||`HTTP ${response.status}`);
     sdrangelReadiness=payload;
@@ -3734,7 +3709,7 @@ async function refreshSdrangelReadiness(){
 async function createSdrangelDeviceSet(){
   const hardwareType=document.getElementById('sdrangelHardware').value;
   try{
-    const response=await fetch('/api/integrations/sdrangel/devicesets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hardware_type:hardwareType})});
+    const response=await apiClient.createSdrangelDeviceSet({hardware_type:hardwareType});
     const payload=await response.json();if(!response.ok)throw new Error(typeof payload.detail==='string'?payload.detail:JSON.stringify(payload.detail));
     document.getElementById('sdrangelDeviceSet').value=payload.device_set_index;
     await refreshSdrangelReadiness();toastMsg(`SDRangel DeviceSet ${payload.device_set_index} létrejött (${hardwareType})`);
@@ -3752,7 +3727,7 @@ async function startSdrangelDemod(){
   if(!readiness?.ready){stopBrowserAudio();toastMsg('A demoduláció feltételei még nem teljesülnek');return;}
   try{
     const browserAudioReady=await audioPreparation;
-    const tuneResponse=await fetch('/api/rf-agent/sdrangel/tune',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({center_frequency_hz:Math.round(frequencyMhz*1e6),device_set_index:deviceSet})});
+    const tuneResponse=await apiClient.tuneSdrangel({center_frequency_hz:Math.round(frequencyMhz*1e6),device_set_index:deviceSet});
     const tune=await tuneResponse.json();if(!tuneResponse.ok)throw new Error(tune.detail||'Hangolási hiba');
     const mode=document.getElementById('sdrangelMode').value;
     const bandwidth=Number(document.getElementById('sdrangelBandwidth').value);
@@ -3762,7 +3737,7 @@ async function startSdrangelDemod(){
     const request={demodulator:mode,device_set_index:deviceSet,offset_hz:0,audio_sample_rate:audioRate,audio_device:audioDevice,volume:Number.isFinite(volume)?volume:1.0};
     if(Number.isFinite(bandwidth)&&bandwidth>0)request.bandwidth_hz=bandwidth;
     if(Number.isFinite(squelch))request.squelch_db=squelch;
-    const demodResponse=await fetch('/api/rf-agent/sdrangel/demod/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+    const demodResponse=await apiClient.startSdrangelDemod(request);
     const demod=await demodResponse.json();if(!demodResponse.ok)throw new Error(typeof demod.detail==='string'?demod.detail:JSON.stringify(demod.detail));
     activeSdrangelChannel=Number.isInteger(demod.channel_index)?demod.channel_index:null;
     document.getElementById('sdrangelChannelIndex').value=activeSdrangelChannel??'';
@@ -3794,7 +3769,7 @@ async function stopSdrangelDemod(){
   const channel=Number(document.getElementById('sdrangelChannelIndex').value);
   if(!Number.isInteger(channel)||channel<0){toastMsg('Nincs leállítható channel index');return;}
   try{
-    const response=await fetch('/api/rf-agent/sdrangel/demod/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({demodulator:document.getElementById('sdrangelMode').value,device_set_index:deviceSet,channel_index:channel})});
+    const response=await apiClient.stopSdrangelDemod({demodulator:document.getElementById('sdrangelMode').value,device_set_index:deviceSet,channel_index:channel});
     const payload=await response.json();if(!response.ok)throw new Error(payload.detail||'Leállítási hiba');
     activeSdrangelChannel=null;document.getElementById('sdrangelChannelIndex').value='';document.getElementById('btnSdrangelStop').disabled=true;
     demodState.active=false;demodState.channelIndex=null;demodState.pendingUpdate=false;demodState.lastError=null;

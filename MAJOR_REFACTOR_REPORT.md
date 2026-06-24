@@ -359,48 +359,118 @@ fő script importálja őket, és csak a `system-tabs.js`/`rag.js`-szel
 való érintkezési pontoknál kell hasonló bridge-et mérlegelni (eddig
 csak a fenti kettő azonosítónál van ilyen érintkezés).
 
-### Következő lépés (megszakítva felhasználói kérésre — pontos folytatási checklist)
+### Elkészült: api-client.js kiemelés (2026-06-24, folytatás 2)
 
-A munka **itt állt meg, kód még nem módosult** ebben a folytatott
-sessionben (csak feltárás + a fenti döntés történt). A következő
-sessionnek ebben a sorrendben kell haladnia:
+A fenti checklist mind a 8 pontja végrehajtva, módosítatlan üzleti
+logikával:
 
-1. `python-processor/static/package.json` létrehozása (`{"type":
-   "module"}`).
-2. `python-processor/static/api/api-client.js` megírása: `export class
-   ApiError extends Error` (mezők: `status`, `payload`) + egy
-   alacsony szintű, megosztott `request(url, init)` helper, ami
-   elvégzi a fetch-et és a JSON parse-ot, majd **vagy** visszaadja
-   `{response, payload}`-ot (ha a call site maga dönt `res.ok`
-   alapján — ez a jelenlegi minták többségénél így van), **vagy**
-   dob egy `ApiError`-t a call site által átadott fallback-szöveggel,
-   a jelenlegi `payload.detail?.message || payload.detail ||
-   fallback` mintázat egységesítésével. Minden fenti 49 call site-hoz
-   egy dedikált, névvel ellátott export függvény (pl.
-   `startSession(body)`, `stopSession(id)`, `fetchWifiDevices(params)`
-   stb.) — a pontos lista a fenti táblázat.
-3. Fő `<script>` tag → `type="module"`; `import {...} from
-   './api/api-client.js';` a tetejére; mind a 49 fetch call site
-   átírása az új függvényekre, a call site-specifikus magyar
-   hibaüzenetek/fallback-ek és vezérlési logika **változatlanul**
-   hagyva.
-4. `window.toastMsg = toastMsg;` / `window.openOperationModal =
-   openOperationModal;` bridge bevezetése.
-5. `tests/frontend/test_ui_static.py` 4 assert-jének átírása
-   `api-client.js`-re (lásd fent).
-6. `scripts/offline-acceptance.sh`: regex `<script type="module">`
-   felismerésre bővítése, temp fájl `.mjs` kiterjesztésre váltása,
-   `api-client.js` felvétele a `js_syntax_targets` tömbbe.
-7. Teljes ellenőrzés: `node --check` az új és módosított fájlokon,
-   `tests/frontend/test_ui_static.py`, teljes `pytest`,
-   `scripts/offline-acceptance.sh`, majd a meglévő Playwright
-   smoke-harness (`pw/smoke.js`, lásd fent — scratch venv + Chromium
-   újraindítása szükséges, ezek nem perzisztens állapotok) mind a 8
-   tabra.
-8. Jelentés + memória frissítése, commit.
+- `python-processor/static/api/package.json` (`{"type":"module"}`) —
+  **fontos eltérés a tervhez képest**: NEM a `static/` gyökerébe
+  került, hanem az `api/` alkönyvtárba. Node a `package.json`
+  `"type"` mezőjét a fájltól felfelé haladva a *legközelebbi*
+  találatból olvassa ki, és ez minden `require()`/`import`
+  betöltésre érvényes, nem csak a `node --check`-re. Az első próbálkozás
+  (`static/package.json`) ezt félreértette: a 4 már korábban kiemelt
+  UMD modult (`demod-passband.js`, `maxhold-controller.js`,
+  `spectrum-frame-adapter.js`+`spectrum-view-model.js`,
+  `viewport-controller.js`) a `tests/frontend/test_*.js` fixture-ök
+  `require()`-rel töltik be; ESM-ként újraértelmezve a `typeof module
+  === 'object'` UMD-guard csendben hamis lett (ESM-ben nincs `module`
+  globális), a `require()` pedig (Node 24 natív `require(esm)`
+  támogatásával) nem dobott hibát, csak egy üres namespace objektumot
+  adott vissza → mind a 4 fixture elszállt (`X.createState is not a
+  function` jellegű hibákkal). Ezt az `scripts/offline-acceptance.sh`
+  teljes futtatása fogta meg. Megoldás: a `package.json`-t az `api/`
+  alkönyvtárba mozgatva a hatókör csak az `api-client.js`-re szűkül,
+  a szülő `static/` könyvtárban lévő fájlok visszaállnak az
+  alapértelmezett CommonJS-interpretációra — ez a böngészőt nem
+  érinti (ott a `<script type="module">` attribútum dönt), és a 4
+  UMD fixture újra zöld.
+- `python-processor/static/api/api-client.js` — 46 exportált
+  függvény, namespace importtal hívva (`import * as apiClient from
+  './api/api-client.js'`) a névkollíziók elkerülésére (több call
+  site-beli wrapper-függvény neve, pl. `saveDeviceBaseline`,
+  `startSdrangelDemod`, egyezik azzal, amit egy névvel ellátott export
+  kapott volna). 3 függvényt (`fetchKismetStatus`, `fetchDetections`,
+  `fetchReferenceSetMeta`) két különböző call site is használja,
+  ezért 46 függvény fedi le mind a 49 eredeti `fetch(` előfordulást —
+  ez szándékos konszolidáció, nem hiányosság.
+- **Szándékos egyszerűsítés a korábbi tervhez képest**: nincs
+  `ApiError` osztály, és a függvények nem parse-olják a JSON-t —
+  mindegyik pontosan a `fetch(url, init)`-et helyettesíti, és a nyers
+  `Promise<Response>`-t adja vissza. Indok: a call site-ok rendkívül
+  vegyesek (van, ami `res.ok`-ot néz `.json()` előtt, van, ami után;
+  van, ami soha nem hív `.json()`-t, pl. `archiveMarker`/`deleteMarker`
+  DELETE — itt egy kényszerített JSON-parse a megosztott helperben
+  egy 204-es üres body esetén ÚJ kivételt dobott volna, ahol korábban
+  nem volt hiba). A `viselkedésmegőrző` elv elsőbbséget kapott a
+  tervrajz szó szerinti megvalósításával szemben; minden válasz-
+  kezelési/hibaüzenet-logika változatlanul az `index.html`-ben maradt.
+- Fő `<script>` → `<script type="module">`, `import * as apiClient
+  ...` a tetején, mind a 49 call site átírva (`grep -c
+  "apiClient\."` → 48 sor / 49 előfordulás, megegyezik az eredeti
+  leltárral).
+- `window.toastMsg` / `window.openOperationModal` bridge bevezetve a
+  `system-tabs.js` classic script-függőség miatt.
+- `tests/frontend/test_ui_static.py`: `_parse_static_ui()` mostantól
+  az `api-client.js`-t is visszaadja; a 4 endpoint-substring assert
+  (`/api/wifi/devices`, `/api/wifi/security-events`,
+  `/api/import/kismet/alerts`, `/api/bluetooth/devices`) áthelyezve
+  `html`-ről `api_client`-re. A negatív assertek változatlanul
+  `html`-en futnak.
+- `scripts/offline-acceptance.sh`: az inline JS syntax check regexje
+  felismeri a `<script type="module">`-t is, a temp fájl kiterjesztése
+  `.mjs`-re váltott, `api-client.js` bekerült a `js_syntax_targets`
+  tömbbe.
 
-A live-verifikációs harness (scratch venv + Playwright Chromium)
-**nem perzisztens** — egy korábbi sessionben épült fel a
-`/tmp/.../scratchpad`-ben, ami sessionek között elveszhet; a
-folytatásnál újra kell építeni, ha már nincs ott (lásd a fenti
-„Live-verifikációs infrastruktúra” szakasz pontos parancsait).
+### Verifikáció (2026-06-24, folytatás 2)
+
+- `node --check` mind az új, mind a meglévő statikus JS fájlokon: PASS.
+- `python -m pytest -q` (system Python, nincs verzióeltérés-probléma
+  ebben a futásban): **132 passed, 8 deselected** — megegyezik a
+  Fázis 0 baseline-nal.
+- `scripts/offline-acceptance.sh`: **0 FAIL, 2 WARN** (`coverage` és
+  `ruff` nincs telepítve a system Pythonban — ugyanaz a 2 ismert
+  hiányosság, mint Fázis 0-ban). Ez a futás fogta meg és igazolta a
+  fenti `package.json`-elhelyezési hibát, majd a javítás után tisztán
+  ment át.
+- Élő böngészős smoke teszt: a korábbi session Node+Playwright
+  harness-e nem perzisztens, újra kellett építeni. `npm` nem volt
+  elérhető ebben a sandboxban (csak bare `nodejs`), ezért a Python
+  `playwright` csomagra váltottam (ugyanaz a Chromium motor, nincs
+  npm-függés) — scratch venv + `pip install playwright && playwright
+  install chromium`. Demo-mód uvicorn (`APP_MODE=demo
+  AUTH_MODE=disabled`, `DATABASE_URL` nélkül) + mind a 8 tab
+  átkattintva: **SMOKE PASS: zero JS errors across all tabs.**
+  Szerveroldali 500/503 zaj van (`/app/recordings` mkdir
+  `PermissionError` — a sandboxban nem írható abszolút útvonal, és
+  DB nélküli 503-ak), de ezek nem `pageerror`-ok, a frontend a meglévő
+  catch-ágaiban kezeli őket, ahogy korábban is.
+- Megvizsgált és igazolt, nem hiba: az `import './api/api-client.js'`
+  relatív specifier `/index.html`-hez viszonyítva `/api/api-client.js`
+  URL-re oldódik fel, ami egybeesik a backend REST namespace-ének
+  `/api/` prefixével. Production-ban (`nginx/default.conf`) a
+  `location /api/ { proxy_pass http://backend:8000/api/; }` szabály
+  ezt a kérést a `backend` konténerhez irányítja, NEM a statikus
+  fájlokat kiszolgáló külön `frontend` (nginx + `docker/frontend/
+  Dockerfile`) konténerhez. Ez működik, mert a FastAPI backend saját
+  maga is felmountolja a `static/` mappát a `/`-re fallbackként
+  (`app/application.py:158`, `app.mount("/", StaticFiles(...))`),
+  ami megelőzte ezt a sessiont — tehát mind a kettő konténer (saját
+  fallback-mount a backendben, illetve a külön frontend konténer)
+  ugyanazt a fájlt szolgálja ki ugyanarról a relatív útvonalról. Nem
+  igényelt módosítást, de érdemes számon tartani: ha ez a fallback
+  mount valaha eltávolításra kerülne a backendből, az `api/` alkönyvtár
+  nevét érdemes lenne megváltoztatni, hogy ne essen egybe a `/api/`
+  REST-prefixszel.
+
+### Következő lépés (Fázis 1 folytatása: state/* és controllers/* modulok)
+
+Az `api-client.js` kiemelés lezárva. A megmaradt inline script
+(~3400 sor) még tartalmazza a state-kezelést (`viewMin`/`mode`/
+`cursor`/`drag`/`activeMeasurementSession`/`staticReference`/stb.) és
+az 5 controller-szerű felelősséget (session, spektrum-rajzolás,
+Wi-Fi/Bluetooth panel, reference-sets, SDRangel/demod). A korábbi
+döntés (valódi ES modul + window-bridge a `toastMsg`/
+`openOperationModal`-hoz) ezekre is érvényes precedens. Ezt a
+darabolást a jelen session nem kezdte el.
