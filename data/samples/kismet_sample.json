@@ -1,0 +1,17 @@
+{
+  "observations": [
+    {
+      "kismet.device.base.macaddr": "02:44:55:66:77:88",
+      "kismet.device.base.name": "Authorized-JSON-Test",
+      "kismet.device.base.channel": "1",
+      "kismet.device.base.frequency": 2412000,
+      "kismet.device.base.signal.last_signal": -58,
+      "kismet.device.base.signal.last_noise": -97,
+      "kismet.device.base.manuf": "Example JSON Vendor",
+      "encryption": "WPA2",
+      "first_seen": "2026-06-18T06:02:00Z",
+      "last_seen": "2026-06-18T06:06:00Z",
+      "packet_count": 52
+    }
+  ]
+}

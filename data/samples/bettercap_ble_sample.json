@@ -1,0 +1,41 @@
+{
+  "events": [
+    {
+      "mac": "02:11:22:33:44:55",
+      "name": "Demo BLE Sensor",
+      "rssi": -61,
+      "vendor": "Example Devices Ltd.",
+      "address_type": "random",
+      "bluetooth_type": "ble",
+      "services": [
+        "0000180f-0000-1000-8000-00805f9b34fb",
+        "0000181a-0000-1000-8000-00805f9b34fb"
+      ],
+      "first_seen": "2026-06-18T08:00:00Z",
+      "last_seen": "2026-06-18T08:02:15Z",
+      "observation_count": 4
+    },
+    {
+      "address": "02:AA:BB:CC:DD:01",
+      "alias": "Demo Beacon",
+      "rssi_dbm": -74.5,
+      "manufacturer": "Training Beacon Co.",
+      "addr_type": "public",
+      "type": "ble",
+      "uuids": ["0000feaa-0000-1000-8000-00805f9b34fb"],
+      "seen": "2026-06-18T08:03:30Z"
+    },
+    {
+      "event": "ble.device.new",
+      "data": {
+        "mac": "02:10:20:30:40:50",
+        "local_name": "Demo Tag",
+        "signal": -68,
+        "vendor": "Fictional Tag Works",
+        "address_type": "random",
+        "services": ["00001800-0000-1000-8000-00805f9b34fb"],
+        "timestamp": "2026-06-18T08:04:10Z"
+      }
+    }
+  ]
+}

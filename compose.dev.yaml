@@ -1,0 +1,10 @@
+services:
+  backend:
+    volumes:
+      - ./python-processor:/app
+      - uploads-data:/app/uploads
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  frontend:
+    volumes:
+      - ./python-processor/static:/usr/share/nginx/html:ro

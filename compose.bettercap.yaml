@@ -1,0 +1,60 @@
+services:
+  bettercap:
+    build:
+      context: .
+      dockerfile: docker/bettercap/Dockerfile
+      args:
+        BETTERCAP_VERSION: ${BETTERCAP_VERSION:-v2.41.7}
+    image: diploma-bettercap:2.41.7
+    pull_policy: never
+
+    profiles:
+      - bettercap
+
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Real Bluetooth/HCI adapter access (ble.recon) is only reliable when the
+    # container shares the host network namespace, the same constraint the
+    # kismet service already has - see KISMET_DOCKER_INTEGRATION.md. This
+    # means the REST API binds on the host like Kismet's WebUI does today;
+    # it is protected by HTTP Basic Auth (BETTERCAP_USERNAME/PASSWORD) and is
+    # not additionally published via "ports".
+    network_mode: host
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /etc/bettercap
+
+    environment:
+      BETTERCAP_BLE_INTERFACE: ${BETTERCAP_BLE_INTERFACE:-hci1}
+      BETTERCAP_USERNAME: ${BETTERCAP_USERNAME:-user}
+      BETTERCAP_PASSWORD: ${BETTERCAP_PASSWORD:-pass}
+      BETTERCAP_REST_ADDRESS: 0.0.0.0
+      BETTERCAP_REST_PORT: 8081
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS -u \"${BETTERCAP_USERNAME:-user}:${BETTERCAP_PASSWORD:-pass}\" http://127.0.0.1:8081/api/session/options || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://diploma.local/schemas/spectrum-frame-v1.json",
+  "title": "SpectrumFrame v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "sensor_id", "source_type", "source_device", "session_id",
+    "timestamp", "sequence", "center_frequency_hz", "start_frequency_hz",
+    "stop_frequency_hz", "step_frequency_hz", "sample_rate_hz", "rbw_hz",
+    "num_points", "power_unit", "powers_dbm", "flags", "metadata"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "sensor_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "source_type": {"enum": ["mock", "replay", "aaronia", "usrp", "hackrf"]},
+    "source_device": {"type": "string", "minLength": 1, "maxLength": 256},
+    "session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "sequence": {"type": "integer", "minimum": 0},
+    "center_frequency_hz": {"type": "integer", "minimum": 1},
+    "start_frequency_hz": {"type": "integer", "minimum": 0},
+    "stop_frequency_hz": {"type": "integer", "minimum": 1},
+    "step_frequency_hz": {"type": "integer", "minimum": 1},
+    "sample_rate_hz": {"type": "integer", "minimum": 1},
+    "rbw_hz": {"type": "number", "exclusiveMinimum": 0},
+    "num_points": {"type": "integer", "minimum": 1, "maximum": 65536},
+    "power_unit": {"const": "dBm"},
+    "powers_dbm": {
+      "type": "array", "minItems": 1, "maxItems": 65536,
+      "items": {"type": "number"}
+    },
+    "flags": {
+      "type": "object",
+      "required": ["overflow", "dropped", "inaccurate"],
+      "properties": {
+        "overflow": {"type": "boolean"},
+        "dropped": {"type": "boolean"},
+        "inaccurate": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["is_simulated"],
+      "properties": {
+        "gain_db": {"type": "number"},
+        "antenna": {"type": "string"},
+        "is_simulated": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

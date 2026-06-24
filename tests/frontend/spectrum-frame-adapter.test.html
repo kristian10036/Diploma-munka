@@ -1,0 +1,46 @@
+<!doctype html><meta charset="utf-8"><title>SpectrumFrame adapter test</title>
+<pre id="result">RUNNING</pre>
+<script src="../../python-processor/static/spectrum-frame-adapter.js"></script>
+<script src="../../python-processor/static/spectrum-view-model.js"></script>
+<script>
+const assert=(condition,message)=>{if(!condition)throw new Error(message);};
+const makeFrame=(count=100,step=1000)=>({
+  schema_version:1,sensor_id:'fixture',source_type:'mock',source_device:'generator',device_model:'generator',measurement_mode:'spectrum',
+  session_id:'session',timestamp:new Date().toISOString(),sequence:7,
+  start_frequency_hz:100000000,stop_frequency_hz:100000000+step*(count-1),
+  step_frequency_hz:step,center_frequency_hz:100000000+step*Math.floor((count-1)/2),
+  sample_rate_hz:1000000,rbw_hz:step,num_points:count,point_count:count,power_unit:'dBm',
+  powers_dbm:Array.from({length:count},(_,i)=>-100+i/count),
+  flags:{overflow:false,dropped:false,inaccurate:false},metadata:{is_simulated:true}
+});
+try {
+  const hundred=SpectrumFrameAdapter.parseSpectrumFrame(makeFrame());
+  assert(hundred.numPoints===100&&hundred.frequenciesHz[1]===100001000,'100 pontos frame');
+  const large=SpectrumFrameAdapter.parseSpectrumFrame(makeFrame(65536,10));
+  assert(large.numPoints===65536&&large.powersDbm.length===65536,'65536 pontos frame');
+  const wideFixture=makeFrame(3,8997500000);wideFixture.start_frequency_hz=5000000;wideFixture.stop_frequency_hz=18000000000;wideFixture.center_frequency_hz=9002500000;wideFixture.sample_rate_hz=17995000000;
+  const wide=SpectrumFrameAdapter.parseSpectrumFrame(wideFixture);
+  assert(wide.startFrequencyHz===5000000&&wide.stopFrequencyHz===18000000000,'teljes hardvertartomány');
+  large.powersDbm[32768]=-5;
+  const envelope=SpectrumViewModel.minMaxEnvelope(large,large.startFrequencyHz,large.stopFrequencyHz,320);
+  assert(envelope.some(point=>point.powerDbm===-5),'peak-preserving envelope');
+  const partial=SpectrumFrameAdapter.parseSpectrumFrame([{x:2400,y:-90},{x:2401,y:-40}]);
+  assert(partial.startFrequencyHz===2400000000&&partial.stopFrequencyHz===2401000000,'részleges tartomány/Hz');
+  const tracker=SpectrumFrameAdapter.createSequenceTracker();tracker.observe(hundred);
+  const gapFrame=makeFrame();gapFrame.sequence=10;
+  assert(tracker.observe(SpectrumFrameAdapter.parseSpectrumFrame(gapFrame)).gap===2,'sequence gap');
+  const badCount=makeFrame();badCount.num_points=99;
+  let rejected=0;
+  for(const bad of [badCount,Object.assign(makeFrame(),{stop_frequency_hz:1}),Object.assign(makeFrame(),{powers_dbm:[NaN]}),Object.assign(makeFrame(),{powers_dbm:[Infinity]})]){
+    try{SpectrumFrameAdapter.parseSpectrumFrame(bad);}catch(_){rejected+=1;}
+  }
+  assert(rejected===4,'hibás frame-ek elutasítása');
+  const legacy=SpectrumFrameAdapter.parseSpectrumFrame([-90,-80],{legacyStartFrequencyHz:10,legacyStopFrequencyHz:20});
+  assert(legacy.format==='legacy-numbers'&&legacy.frequenciesHz[1]===20,'legacy számtömb');
+  const overview=new SpectrumViewModel.OverviewAccumulator({minFrequencyHz:1,maxFrequencyHz:1000,bucketCount:100,staleAfterMs:100});
+  overview.update(legacy,1000);
+  const bucket=overview.bucketFor(20);
+  assert(overview.at(bucket,1050).valid&&!overview.at(bucket,1050).stale&&overview.at(bucket,1200).stale,'overview validity/stale');
+  document.getElementById('result').textContent='PASS';
+} catch(error) { document.getElementById('result').textContent='FAIL: '+error.message; }
+</script>

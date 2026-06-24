@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TSCM Import</title>
+<style>
+:root{
+  --bg:#090b0a;
+  --panel:#111716;
+  --line:#263631;
+  --text:#dce8e3;
+  --muted:#7f948d;
+  --green:#00e676;
+  --yellow:#ffd54f;
+  --red:#ff5252;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  min-height:100vh;
+  background:#090b0a;
+  color:var(--text);
+  font-family:Segoe UI,Roboto,Arial,sans-serif;
+}
+.shell{
+  width:min(1180px,calc(100% - 24px));
+  margin:0 auto;
+  padding:16px 0 28px;
+}
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.brand{
+  color:var(--green);
+  font-size:14px;
+  letter-spacing:1px;
+  font-weight:700;
+}
+.grid{
+  display:grid;
+  grid-template-columns:minmax(300px,440px) 1fr;
+  gap:12px;
+}
+.panel{
+  background:linear-gradient(180deg,#111716,#0b100f);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:14px;
+}
+.panel-title{
+  margin:0 0 12px;
+  color:var(--green);
+  font-size:12px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  margin-bottom:10px;
+}
+label{
+  color:var(--muted);
+  font-size:11px;
+  letter-spacing:.6px;
+  text-transform:uppercase;
+}
+input,select,textarea{
+  width:100%;
+  background:#070a09;
+  color:#defded;
+  border:1px solid #263631;
+  border-radius:5px;
+  padding:8px 9px;
+  font:13px Consolas,Monaco,monospace;
+  outline:none;
+}
+textarea{min-height:92px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--green)}
+button{
+  background:#101514;
+  color:#b8cac3;
+  border:1px solid #2b3935;
+  border-radius:5px;
+  font-size:12px;
+  padding:8px 11px;
+  cursor:pointer;
+}
+button:hover{border-color:#557067;color:#fff;background:#18201e}
+button.primary{border-color:var(--green);color:var(--green)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.note{color:var(--muted);font-size:12px;line-height:1.45}
+.result{
+  margin-top:10px;
+  min-height:120px;
+  background:#070a09;
+  border:1px solid #1b2824;
+  border-radius:5px;
+  padding:10px;
+  color:#cfe5dc;
+  white-space:pre-wrap;
+  overflow:auto;
+  font:12px Consolas,Monaco,monospace;
+}
+.status-ok{color:var(--green)}
+.status-warn{color:var(--yellow)}
+.status-error{color:var(--red)}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+th,td{
+  border-bottom:1px solid #1d2b27;
+  padding:7px;
+  text-align:left;
+  vertical-align:top;
+}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+@media(max-width:860px){
+  .grid{grid-template-columns:1fr}
+  .topbar{align-items:flex-start;flex-direction:column}
+}
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="topbar">
+    <div class="brand">TSCM_IMPORT</div>
+    <div class="row">
+      <button id="btnSpectrum">Spectrum</button>
+      <button id="btnHealth">API Health</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <h1 class="panel-title">CSV feltoltes</h1>
+      <form id="uploadForm">
+        <div class="field">
+          <label for="deviceType">Eszkoztipus</label>
+          <select id="deviceType" name="deviceType" required>
+            <option value="oscor">OSCOR</option>
+            <option value="ddf">DDF</option>
+            <option value="pr100">PR100</option>
+            <option value="mesa">MESA</option>
+            <option value="kismet">Kismet</option>
+            <option value="bettercap_ble">Bettercap BLE</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="locationName">Helyszin</label>
+          <input id="locationName" name="locationName" placeholder="pl. Targyalo 1" required>
+        </div>
+        <div class="field">
+          <label for="measuredAt">Meresi idopont opcionális</label>
+          <input id="measuredAt" name="measuredAt" type="datetime-local">
+        </div>
+        <div class="field">
+          <label for="csvFile">CSV fajl</label>
+          <input id="csvFile" name="csvFile" type="file" accept=".csv,text/csv" required>
+        </div>
+        <button class="primary" type="submit">Feltoltes</button>
+      </form>
+      <div id="uploadResult" class="result">Nincs meg feltoltes.</div>
+    </section>
+
+  </div>
+
+  <section class="panel" style="margin-top:12px">
+    <h2 class="panel-title">Passzív Kismet import</h2>
+    <p class="note">CSV vagy JSON megfigyelések importja engedélyezett mérési környezetből. A megadott session UUID elsőbbséget élvez; enélkül a helyszín aktív sessionje lesz használva.</p>
+    <form id="kismetImportForm">
+      <div class="grid">
+        <div>
+          <div class="field">
+            <label for="kismetSessionId">Measurement session UUID opcionális</label>
+            <input id="kismetSessionId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+          </div>
+          <div class="field">
+            <label for="kismetLocationName">Helyszín session-kereséshez</label>
+            <input id="kismetLocationName" placeholder="pl. TEST_LAB">
+          </div>
+          <div class="field">
+            <label for="kismetSourceName">Forrás neve</label>
+            <input id="kismetSourceName" value="kismet_file_import">
+          </div>
+        </div>
+        <div>
+          <div class="field">
+            <label for="kismetFile">Kismet CSV vagy JSON</label>
+            <input id="kismetFile" type="file" accept=".csv,.json,text/csv,application/json" required>
+          </div>
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:8px;text-transform:none">
+              <input id="kismetAllowWithoutSession" type="checkbox" style="width:auto">
+              Session nélküli import explicit engedélyezése
+            </label>
+          </div>
+          <button class="primary" type="submit">Kismet import</button>
+        </div>
+      </div>
+    </form>
+    <div id="kismetImportResult" class="result">Nincs még Kismet import.</div>
+  </section>
+
+  <section class="panel" style="margin-top:12px">
+    <h2 class="panel-title">Passzív Bettercap BLE import</h2>
+    <p class="note">Bettercap BLE JSON megfigyelések importja engedélyezett mérési környezetből. A megadott session UUID elsőbbséget élvez; enélkül a helyszín aktív sessionje lesz használva. CSV is elfogadott kompatibilitási formátum.</p>
+    <form id="bettercapImportForm">
+      <div class="grid">
+        <div>
+          <div class="field">
+            <label for="bettercapSessionId">Measurement session UUID opcionális</label>
+            <input id="bettercapSessionId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+          </div>
+          <div class="field">
+            <label for="bettercapLocationName">Helyszín session-kereséshez</label>
+            <input id="bettercapLocationName" placeholder="pl. TEST_LAB">
+          </div>
+          <div class="field">
+            <label for="bettercapSourceName">Forrás neve</label>
+            <input id="bettercapSourceName" value="bettercap_ble_file_import">
+          </div>
+        </div>
+        <div>
+          <div class="field">
+            <label for="bettercapFile">Bettercap BLE JSON</label>
+            <input id="bettercapFile" type="file" accept=".json,.csv,application/json,text/csv" required>
+          </div>
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:8px;text-transform:none">
+              <input id="bettercapAllowWithoutSession" type="checkbox" style="width:auto">
+              Session nélküli import explicit engedélyezése
+            </label>
+          </div>
+          <button class="primary" type="submit">Bettercap BLE import</button>
+        </div>
+      </div>
+    </form>
+    <div id="bettercapImportResult" class="result">Nincs még Bettercap BLE import.</div>
+  </section>
+
+  <section class="panel" style="margin-top:12px">
+    <h2 class="panel-title">Referencia retegek</h2>
+    <div class="grid">
+      <form id="bandReferenceForm">
+        <div class="field">
+          <label for="bandSourceName">Band source_name alapertelmezett</label>
+          <input id="bandSourceName" placeholder="pl. NMHH">
+        </div>
+        <div class="field">
+          <label for="bandVersion">Version alapertelmezett</label>
+          <input id="bandVersion" placeholder="pl. 2026-06">
+        </div>
+        <div class="field">
+          <label for="bandLocationName">Location alapertelmezett</label>
+          <input id="bandLocationName" placeholder="pl. Targyalo 1">
+        </div>
+        <div class="field">
+          <label for="bandCsvFile">Frequency band CSV</label>
+          <input id="bandCsvFile" type="file" accept=".csv,text/csv" required>
+        </div>
+        <button class="primary" type="submit">Band referencia import</button>
+      </form>
+
+      <form id="spectrumReferenceForm">
+        <div class="field">
+          <label for="spectrumReferenceId">Reference ID alapertelmezett</label>
+          <input id="spectrumReferenceId" placeholder="pl. nmhh_targyalo_2026_06">
+        </div>
+        <div class="field">
+          <label for="spectrumLocationName">Location alapertelmezett</label>
+          <input id="spectrumLocationName" placeholder="pl. Targyalo 1">
+        </div>
+        <div class="field">
+          <label for="spectrumDeviceName">Device alapertelmezett</label>
+          <input id="spectrumDeviceName" placeholder="pl. OSCOR vagy SPECTRAN V6 PLUS">
+        </div>
+        <div class="field">
+          <label for="spectrumCsvFile">Baseline spectrum CSV</label>
+          <input id="spectrumCsvFile" type="file" accept=".csv,text/csv" required>
+        </div>
+        <button class="primary" type="submit">Baseline referencia import</button>
+      </form>
+    </div>
+
+    <form id="referenceImageForm" style="margin-top:12px">
+      <div class="grid">
+        <div>
+          <div class="field">
+            <label for="imageFile">IRCOS referencia kep BMP/PNG</label>
+            <input id="imageFile" type="file" accept=".bmp,.png,image/bmp,image/png" required>
+          </div>
+          <div class="field">
+            <label for="imageLocationName">Location opcionális</label>
+            <input id="imageLocationName" placeholder="pl. Targyalo 1">
+          </div>
+          <div class="field">
+            <label for="imageSourceName">Source opcionális</label>
+            <input id="imageSourceName" placeholder="pl. IRCOS">
+          </div>
+        </div>
+        <div>
+          <div class="field">
+            <label for="imageStartHz">Start Hz</label>
+            <input id="imageStartHz" required placeholder="pl. 2400000000">
+          </div>
+          <div class="field">
+            <label for="imageEndHz">End Hz</label>
+            <input id="imageEndHz" required placeholder="pl. 2500000000">
+          </div>
+          <div class="field">
+            <label for="imageMinDbm">Min dBm</label>
+            <input id="imageMinDbm" required placeholder="pl. -110">
+          </div>
+          <div class="field">
+            <label for="imageMaxDbm">Max dBm</label>
+            <input id="imageMaxDbm" required placeholder="pl. 0">
+          </div>
+          <button class="primary" type="submit">Referencia kep feltoltes</button>
+        </div>
+      </div>
+    </form>
+    <div id="referenceResult" class="result">Nincs meg referencia import.</div>
+  </section>
+
+  <section class="panel" style="margin-top:12px">
+    <h2 class="panel-title">Jelenlegi import celok</h2>
+    <table>
+      <thead>
+        <tr><th>Eszkoz</th><th>Tabla</th><th>Megjegyzes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>OSCOR</td><td>oscor_import_rows</td><td>Frekvencia, jelszint, savszelesseg, raw CSV sor.</td></tr>
+        <tr><td>DDF</td><td>ddf_import_rows</td><td>Frekvencia, jelszint, irany/azimut, raw CSV sor.</td></tr>
+        <tr><td>PR100</td><td>pr100_import_rows</td><td>Frekvencia, jelszint, modulacio, savszelesseg, raw CSV sor.</td></tr>
+        <tr><td>MESA</td><td>mesa_import_rows</td><td>Frekvencia, jelszint, cimke, osztalyozas, raw CSV sor.</td></tr>
+        <tr><td>Kismet</td><td>kismet_import_rows + wifi_* tablák</td><td>MAC/BSSID, SSID, csatorna, RSSI normalizalva is mentodik.</td></tr>
+        <tr><td>Bettercap BLE</td><td>bettercap_ble_import_rows + bluetooth_* tablák</td><td>MAC, nev, RSSI, service UUID normalizalva is mentodik.</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+'use strict';
+
+const uploadForm = document.getElementById('uploadForm');
+const uploadResult = document.getElementById('uploadResult');
+const referenceResult = document.getElementById('referenceResult');
+const kismetImportResult = document.getElementById('kismetImportResult');
+const bettercapImportResult = document.getElementById('bettercapImportResult');
+
+function pretty(value){
+  return JSON.stringify(value, null, 2);
+}
+
+function setResult(el, value, cls=''){
+  el.className = `result ${cls}`;
+  el.textContent = typeof value === 'string' ? value : pretty(value);
+}
+
+document.getElementById('btnSpectrum').addEventListener('click', ()=>{
+  window.location.href = '/';
+});
+
+document.getElementById('btnHealth').addEventListener('click', async ()=>{
+  try {
+    const res = await fetch('/api/health');
+    setResult(uploadResult, await res.json(), res.ok ? 'status-ok' : 'status-error');
+  } catch (err) {
+    setResult(uploadResult, String(err), 'status-error');
+  }
+});
+
+uploadForm.addEventListener('submit', async (event)=>{
+  event.preventDefault();
+  const deviceType = document.getElementById('deviceType').value;
+  const form = new FormData();
+  form.append('location_name', document.getElementById('locationName').value.trim());
+  const measuredAt = document.getElementById('measuredAt').value;
+  if (measuredAt) form.append('measured_at', new Date(measuredAt).toISOString());
+  const file = document.getElementById('csvFile').files[0];
+  if (!file) {
+    setResult(uploadResult, 'Nincs kivalasztott CSV fajl.', 'status-error');
+    return;
+  }
+  form.append('file', file);
+  setResult(uploadResult, 'Feltoltes folyamatban...', 'status-warn');
+  try {
+    const res = await fetch(`/api/imports/${encodeURIComponent(deviceType)}`, {
+      method: 'POST',
+      body: form
+    });
+    const payload = await res.json();
+    setResult(uploadResult, payload, res.ok ? 'status-ok' : 'status-error');
+  } catch (err) {
+    setResult(uploadResult, String(err), 'status-error');
+  }
+});
+
+document.getElementById('kismetImportForm').addEventListener('submit', async (event)=>{
+  event.preventDefault();
+  const file = document.getElementById('kismetFile').files[0];
+  if (!file) {
+    setResult(kismetImportResult, 'Nincs kiválasztott Kismet CSV vagy JSON fájl.', 'status-error');
+    return;
+  }
+  const form = new FormData();
+  form.append('file', file);
+  const sessionId = document.getElementById('kismetSessionId').value.trim();
+  const locationName = document.getElementById('kismetLocationName').value.trim();
+  const sourceName = document.getElementById('kismetSourceName').value.trim();
+  if (sessionId) form.append('measurement_session_id', sessionId);
+  if (locationName) form.append('location_name', locationName);
+  if (sourceName) form.append('source_name', sourceName);
+  form.append('allow_without_session', document.getElementById('kismetAllowWithoutSession').checked ? 'true' : 'false');
+  setResult(kismetImportResult, 'Kismet import folyamatban...', 'status-warn');
+  try {
+    const res = await fetch('/api/import/kismet', {method:'POST', body:form});
+    const payload = await res.json();
+    setResult(kismetImportResult, payload, res.ok ? 'status-ok' : 'status-error');
+  } catch (err) {
+    setResult(kismetImportResult, String(err), 'status-error');
+  }
+});
+
+document.getElementById('bettercapImportForm').addEventListener('submit', async (event)=>{
+  event.preventDefault();
+  const file = document.getElementById('bettercapFile').files[0];
+  if (!file) {
+    setResult(bettercapImportResult, 'Nincs kiválasztott Bettercap BLE JSON vagy CSV fájl.', 'status-error');
+    return;
+  }
+  const form = new FormData();
+  form.append('file', file);
+  const sessionId = document.getElementById('bettercapSessionId').value.trim();
+  const locationName = document.getElementById('bettercapLocationName').value.trim();
+  const sourceName = document.getElementById('bettercapSourceName').value.trim();
+  if (sessionId) form.append('measurement_session_id', sessionId);
+  if (locationName) form.append('location_name', locationName);
+  if (sourceName) form.append('source_name', sourceName);
+  form.append('allow_without_session', document.getElementById('bettercapAllowWithoutSession').checked ? 'true' : 'false');
+  setResult(bettercapImportResult, 'Bettercap BLE import folyamatban...', 'status-warn');
+  try {
+    const res = await fetch('/api/import/bettercap-ble', {method:'POST', body:form});
+    const payload = await res.json();
+    setResult(bettercapImportResult, payload, res.ok ? 'status-ok' : 'status-error');
+  } catch (err) {
+    setResult(bettercapImportResult, String(err), 'status-error');
+  }
+});
+
+document.getElementById('bandReferenceForm').addEventListener('submit', async (event)=>{
+  event.preventDefault();
+  const file = document.getElementById('bandCsvFile').files[0];
+  if (!file) {
+    setResult(referenceResult, 'Nincs kivalasztott band CSV fajl.', 'status-error');
+    return;
+  }
+  const form = new FormData();
+  form.append('file', file);
+  const sourceName = document.getElementById('bandSourceName').value.trim();
+  const version = document.getElementById('bandVersion').value.trim();
+  const locationName = document.getElementById('bandLocationName').value.trim();
+  if (sourceName) form.append('source_name', sourceName);
+  if (version) form.append('version', version);
+  if (locationName) form.append('location_name', locationName);
+  setResult(referenceResult, 'Frequency band referencia import folyamatban...', 'status-warn');
+  try {
+    const res = await fetch('/api/references/bands/import', { method:'POST', body:form });
+    const payload = await res.json();
+    setResult(referenceResult, payload, res.ok ? 'status-ok' : 'status-error');
+  } catch (err) {
+    setResult(referenceResult, String(err), 'status-error');
+  }
+});
+
+document.getElementById('spectrumReferenceForm').addEventListener('submit', async (event)=>{
+  event.preventDefault();
+  const file = document.getElementById('spectrumCsvFile').files[0];
+  if (!file) {
+    setResult(referenceResult, 'Nincs kivalasztott baseline spectrum CSV fajl.', 'status-error');
+    return;
+  }
+  const form = new FormData();
+  form.append('file', file);
+  const referenceId = document.getElementById('spectrumReferenceId').value.trim();
+  const locationName = document.getElementById('spectrumLocationName').value.trim();
+  const deviceName = document.getElementById('spectrumDeviceName').value.trim();
+  if (referenceId) form.append('reference_id', referenceId);
+  if (locationName) form.append('location_name', locationName);
+  if (deviceName) form.append('device_name', deviceName);
+  setResult(referenceResult, 'Baseline spectrum referencia import folyamatban...', 'status-warn');
+  try {
+    const res = await fetch('/api/references/spectrum/import', { method:'POST', body:form });
+    const payload = await res.json();
+    setResult(referenceResult, payload, res.ok ? 'status-ok' : 'status-error');
+  } catch (err) {
+    setResult(referenceResult, String(err), 'status-error');
+  }
+});
+
+document.getElementById('referenceImageForm').addEventListener('submit', async (event)=>{
+  event.preventDefault();
+  const file = document.getElementById('imageFile').files[0];
+  if (!file) {
+    setResult(referenceResult, 'Nincs kivalasztott referencia kep.', 'status-error');
+    return;
+  }
+  const form = new FormData();
+  form.append('file', file);
+  form.append('start_hz', document.getElementById('imageStartHz').value.trim());
+  form.append('end_hz', document.getElementById('imageEndHz').value.trim());
+  form.append('min_dbm', document.getElementById('imageMinDbm').value.trim());
+  form.append('max_dbm', document.getElementById('imageMaxDbm').value.trim());
+  const locationName = document.getElementById('imageLocationName').value.trim();
+  const sourceName = document.getElementById('imageSourceName').value.trim();
+  if (locationName) form.append('location_name', locationName);
+  if (sourceName) form.append('source_name', sourceName);
+  setResult(referenceResult, 'Referencia kep feltoltes folyamatban...', 'status-warn');
+  try {
+    const res = await fetch('/api/references/images', { method:'POST', body:form });
+    const payload = await res.json();
+    setResult(referenceResult, payload, res.ok ? 'status-ok' : 'status-error');
+  } catch (err) {
+    setResult(referenceResult, String(err), 'status-error');
+  }
+});
+
+</script>
+</body>
+</html>

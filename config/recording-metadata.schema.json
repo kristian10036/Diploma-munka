@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://diploma.local/schemas/recording-metadata-v1.json",
+  "title": "RF spectrum recording metadata v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "recording_id",
+    "session_id",
+    "source_type",
+    "source_device",
+    "started_at",
+    "ended_at",
+    "frame_file",
+    "frame_count",
+    "compression",
+    "checksum_algorithm",
+    "sensor_id",
+    "checksum_sha256",
+    "status",
+    "start_frequency_hz",
+    "stop_frequency_hz",
+    "num_points"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "frame_file": {
+      "type": "string",
+      "enum": [
+        "frames.ndjson.zst",
+        "frames.ndjson"
+      ]
+    },
+    "recording_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_device": {
+      "type": "string",
+      "minLength": 1
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "first_frame_timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_frame_timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "compression": {
+      "const": "zstd"
+    },
+    "checksum_algorithm": {
+      "const": "sha256"
+    },
+    "frame_interval_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "frame_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sensor_id": {
+      "type": "string"
+    },
+    "source_type": {
+      "enum": [
+        "mock",
+        "replay",
+        "aaronia",
+        "usrp",
+        "hackrf"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "checksum_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": [
+        "recording",
+        "completed",
+        "failed"
+      ]
+    },
+    "start_frequency_hz": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stop_frequency_hz": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "num_points": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

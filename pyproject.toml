@@ -1,0 +1,55 @@
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = "-ra"
+testpaths = [
+  "python-processor/tests",
+  "tests",
+  "spectrum-ingest",
+]
+python_files = [
+  "test_*.py",
+]
+norecursedirs = [
+  ".git",
+  ".venv",
+  "__pycache__",
+  "node_modules",
+]
+markers = [
+  "backend: backend Python test coverage for python-processor and ingest components",
+  "docker: checks that require a containerized environment or Docker build stage",
+  "frontend: static frontend and JavaScript-adjacent checks",
+  "hardware: checks that require RF hardware or hardware-specific build targets",
+  "api: API contract checks that expect a running backend service",
+  "websocket: WebSocket contract checks that expect a running service",
+  "integration: multi-component or service-backed checks",
+  "offline: deterministic checks intended for offline acceptance",
+  "unit: narrow, dependency-light checks",
+]
+
+[tool.coverage.run]
+branch = true
+source = [
+  "python-processor/app",
+  "spectrum-ingest",
+]
+omit = [
+  "*/tests/*",
+  "tests/*",
+  "conftest.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 2
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [
+  "python-processor/static",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

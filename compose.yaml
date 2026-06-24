@@ -1,0 +1,450 @@
+
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  database:
+    image: diploma-timescaledb-pgvector:2.17.2-pg16-v0.8.3
+    build:
+      context: .
+      dockerfile: database/Dockerfile
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *default-logging
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tscm_security}
+      POSTGRES_USER: ${POSTGRES_USER:-tscm_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_dev_only}
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/migrations:/migrations:ro
+
+    expose:
+      - "5432"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  migrate:
+    image: diploma-backend:local
+    pull_policy: never
+    build:
+      context: ./python-processor
+      target: runtime
+    restart: "no"
+    logging: *default-logging
+
+    read_only: true
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+    volumes:
+      - ./database/migrations:/migrations:ro
+      - ./scripts/run-migrations.sh:/usr/local/bin/run-migrations.sh:ro
+
+    environment:
+      PGHOST: database
+      PGDATABASE: ${POSTGRES_DB:-tscm_security}
+      PGUSER: ${POSTGRES_USER:-tscm_app}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-change_me_dev_only}
+      ALLOW_DESTRUCTIVE_MIGRATIONS: ${ALLOW_DESTRUCTIVE_MIGRATIONS:-false}
+      BACKUP_CONFIRMED: ${BACKUP_CONFIRMED:-false}
+
+    entrypoint:
+      - /usr/local/bin/run-migrations.sh
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    restart: unless-stopped
+    init: true
+    user: "1883:1883"
+    stop_grace_period: 20s
+    logging: *default-logging
+
+    read_only: true
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    command:
+      - mosquitto
+      - -c
+      - /mosquitto/config/mosquitto.conf
+
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+    expose:
+      - "1883"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mosquitto_pub",
+          "-h",
+          "127.0.0.1",
+          "-p",
+          "1883",
+          "-t",
+          "healthcheck",
+          "-m",
+          "ok"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  spectrum-ingest:
+    build:
+      context: ./spectrum-ingest
+      target: runtime
+
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *default-logging
+
+    read_only: true
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    environment:
+      RF_AGENT_URL: ${RF_AGENT_URL:-http://rf-agent:8765}
+      RF_AGENT_WS_URL: ${RF_AGENT_WS_URL:-ws://rf-agent:8765/ws/spectrum}
+      SPECTRUM_SOURCE_MODE: ${SPECTRUM_SOURCE_MODE:-mock}
+      SPECTRUM_INGEST_MAX_QUEUE: ${SPECTRUM_INGEST_MAX_QUEUE:-32}
+      SPECTRUM_INGEST_RECONNECT_SECONDS: ${SPECTRUM_INGEST_RECONNECT_SECONDS:-2}
+      SPECTRUM_CLIENT_MAX_FPS: ${SPECTRUM_CLIENT_MAX_FPS:-5}
+      SPECTRUM_INGEST_MAX_FRAME_BYTES: ${SPECTRUM_INGEST_MAX_FRAME_BYTES:-4194304}
+      AUDIO_UDP_HOST: 0.0.0.0
+      AUDIO_UDP_PORT: 9998
+      AUDIO_SAMPLE_RATE_HZ: ${SDRANGEL_AUDIO_SAMPLE_RATE_HZ:-48000}
+      AUDIO_MAX_QUEUE: ${SDRANGEL_AUDIO_MAX_QUEUE:-128}
+
+    expose:
+      - "8001"
+
+    ports:
+      - "127.0.0.1:${SDRANGEL_AUDIO_UDP_PORT:-9998}:9998/udp"
+
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/live', timeout=3).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *default-logging
+
+    read_only: true
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+    expose:
+      - "9090"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:9090/-/ready",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    image: diploma-backend:local
+    pull_policy: never
+    build:
+      context: ./python-processor
+      target: runtime
+
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *default-logging
+
+    read_only: true
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    environment:
+      APP_MODE: ${APP_MODE:-demo}
+
+      AUTH_MODE: ${AUTH_MODE:-disabled}
+      AUTH_ANONYMOUS_READ: ${AUTH_ANONYMOUS_READ:-true}
+      AUTH_OPERATOR_TOKEN_SHA256: ${AUTH_OPERATOR_TOKEN_SHA256:-}
+      AUTH_ADMIN_TOKEN_SHA256: ${AUTH_ADMIN_TOKEN_SHA256:-}
+
+      MAX_REQUEST_BYTES: ${MAX_REQUEST_BYTES:-209715200}
+
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SERVICE_NAME: tscm-backend
+
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tscm_app}:${POSTGRES_PASSWORD:-change_me_dev_only}@database:5432/${POSTGRES_DB:-tscm_security}
+
+      RF_AGENT_INTEGRATION_ENABLED: ${RF_AGENT_INTEGRATION_ENABLED:-true}
+      RF_AGENT_URL: ${RF_AGENT_URL:-http://rf-agent:8765}
+      RF_AGENT_TIMEOUT_SECONDS: ${RF_AGENT_TIMEOUT_SECONDS:-3}
+
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: 1883
+
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
+
+      AI_ENABLED: ${AI_ENABLED:-false}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-20}
+      ASSISTANT_MAX_CONTEXT_RECORDS: ${ASSISTANT_MAX_CONTEXT_RECORDS:-10}
+
+      RAG_ENABLED: ${RAG_ENABLED:-false}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-local_hash}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-local-feature-hash-v1}
+      RAG_CHUNK_CHARACTERS: ${RAG_CHUNK_CHARACTERS:-1200}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-200}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+
+      SPECTRUM_SOURCE_MODE: ${SPECTRUM_SOURCE_MODE:-simulator}
+      SPECTRUM_INGEST_WS_URL: ${SPECTRUM_INGEST_WS_URL:-ws://spectrum-ingest:8001/ws/spectrum}
+      SPECTRUM_INGEST_TIMEOUT_SECONDS: ${SPECTRUM_INGEST_TIMEOUT_SECONDS:-5}
+      SPECTRUM_START_MHZ: ${SPECTRUM_START_MHZ:-88}
+      SPECTRUM_END_MHZ: ${SPECTRUM_END_MHZ:-108}
+      SPECTRUM_POINT_COUNT: ${SPECTRUM_POINT_COUNT:-100}
+
+      DEMO_ANOMALY_ENABLED: ${DEMO_ANOMALY_ENABLED:-true}
+      DEMO_ANOMALY_FREQUENCY_MHZ: ${DEMO_ANOMALY_FREQUENCY_MHZ:-2460}
+      DEMO_ANOMALY_LEVEL_DBM: ${DEMO_ANOMALY_LEVEL_DBM:--35}
+
+      AARONIA_RTSA_URL: ${AARONIA_RTSA_URL:-http://host.docker.internal:54664}
+      AARONIA_TIMEOUT_SECONDS: ${AARONIA_TIMEOUT_SECONDS:-5}
+
+      KISMET_INTEGRATION_ENABLED: ${KISMET_INTEGRATION_ENABLED:-false}
+      KISMET_API_URL: ${KISMET_API_URL:-http://host.docker.internal:2501}
+      KISMET_API_KEY: ${KISMET_API_KEY:-}
+      KISMET_HTTPD_USERNAME: ${KISMET_HTTPD_USERNAME:-kismet}
+      KISMET_HTTPD_PASSWORD: ${KISMET_HTTPD_PASSWORD:-change_me_kismet}
+      KISMET_POLL_INTERVAL_SECONDS: ${KISMET_POLL_INTERVAL_SECONDS:-15}
+      KISMET_DEVICES_ENDPOINT: ${KISMET_DEVICES_ENDPOINT:-/devices/views/all/devices.json}
+      KISMET_ALERTS_ENDPOINT: ${KISMET_ALERTS_ENDPOINT:-/alerts/all_alerts.json}
+      KISMET_TIMEOUT_SECONDS: ${KISMET_TIMEOUT_SECONDS:-5}
+      KISMET_HISTORY_RSSI_DELTA_DB: ${KISMET_HISTORY_RSSI_DELTA_DB:-3}
+      KISMET_HISTORY_HEARTBEAT_SECONDS: ${KISMET_HISTORY_HEARTBEAT_SECONDS:-10}
+      KISMET_BLUETOOTH_INTERFACE: ${KISMET_BLUETOOTH_INTERFACE:-hci0}
+
+      BETTERCAP_INTEGRATION_ENABLED: ${BETTERCAP_INTEGRATION_ENABLED:-false}
+      BETTERCAP_API_URL: ${BETTERCAP_API_URL:-http://host.docker.internal:8081}
+      BETTERCAP_USERNAME: ${BETTERCAP_USERNAME:-user}
+      BETTERCAP_PASSWORD: ${BETTERCAP_PASSWORD:-pass}
+      BETTERCAP_API_TIMEOUT_SECONDS: ${BETTERCAP_API_TIMEOUT_SECONDS:-5}
+      BETTERCAP_BLE_ENABLED: ${BETTERCAP_BLE_ENABLED:-true}
+      BETTERCAP_BLE_INTERFACE: ${BETTERCAP_BLE_INTERFACE:-hci1}
+      BETTERCAP_POLL_INTERVAL_SECONDS: ${BETTERCAP_POLL_INTERVAL_SECONDS:-2}
+
+      WIFI_BASELINE_MISSING_GRACE_SECONDS: ${WIFI_BASELINE_MISSING_GRACE_SECONDS:-180}
+      BLUETOOTH_BASELINE_MISSING_GRACE_SECONDS: ${BLUETOOTH_BASELINE_MISSING_GRACE_SECONDS:-300}
+
+      RECORDINGS_DIR: /app/recordings
+      RECORDINGS_QUARANTINE_DIR: /app/recordings/.quarantine
+      RECORDINGS_MIN_FREE_BYTES: ${RECORDINGS_MIN_FREE_BYTES:-5368709120}
+      RECORDINGS_MAX_BYTES: ${RECORDINGS_MAX_BYTES:-21474836480}
+      RECORDINGS_MAX_DURATION_SECONDS: ${RECORDINGS_MAX_DURATION_SECONDS:-3600}
+      RECORDINGS_RETENTION_DAYS: ${RECORDINGS_RETENTION_DAYS:-30}
+
+      ANOMALY_QUEUE_SIZE: ${ANOMALY_QUEUE_SIZE:-32}
+
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+    volumes:
+      - uploads-data:/app/uploads
+      - recordings-data:/app/recordings
+
+    expose:
+      - "8000"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/live', timeout=3).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mosquitto:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *default-logging
+
+    read_only: true
+
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    expose:
+      - "80"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://127.0.0.1/ || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  reverse-proxy:
+    image: nginx:1.27.5-alpine
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *default-logging
+
+    read_only: true
+
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://127.0.0.1/api/health/live || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      spectrum-ingest:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  recordings-data:
+  prometheus-data:
+  uploads-data:

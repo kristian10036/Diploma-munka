@@ -1,0 +1,11 @@
+\i /migrations/001_initial_schema.sql
+\i /migrations/002_device_import_tables.sql
+\i /migrations/003_reference_layers.sql
+\i /migrations/004_reference_band_nmhh_fields.sql
+\i /migrations/005_measurement_sessions.sql
+\i /migrations/006_kismet_wifi_alignment.sql
+\i /migrations/007_bettercap_ble_alignment.sql
+\i /migrations/008_spectrum_recordings.sql
+\i /migrations/009_rag_vector_index.sql
+
+\i /migrations/010_operational_metadata.sql

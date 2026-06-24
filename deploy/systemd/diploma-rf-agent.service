@@ -1,0 +1,28 @@
+[Unit]
+Description=Diploma RF Agent
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=rfagent
+Group=rfagent
+EnvironmentFile=/etc/diploma/rf-agent.env
+ExecStart=/usr/local/bin/rf-agent
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/diploma/recordings/spectrum
+# USB/USRP/Aaronia eszközökhöz a vendor udev szabályok és csoporttagságok
+# szükségesek. A hardware device-okat emiatt nem zárjuk el PrivateDevices-szel.
+PrivateDevices=false
+
+[Install]
+WantedBy=multi-user.target

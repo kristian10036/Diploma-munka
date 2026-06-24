@@ -1,0 +1,20 @@
+Codex feladat - referenciaadat import a spectrum monitorhoz
+
+A csomag két CSV-t tartalmaz:
+1) nmhh_spectrum_reference_temp_0hz_24ghz.csv
+   - NMHH 2. melléklet alapján összeállított induló frekvenciasáv-referencia 0 Hz - 24 GHz között.
+   - A temporary_normal_min_dbm, temporary_normal_max_dbm és temporary_peak_alarm_dbm mezők NEM hivatalos NMHH határértékek.
+   - Ezek ideiglenes TSCM/spektrum-monitor baseline értékek, amelyeket helyszíni méréssel felül kell írni.
+
+2) site_baseline_manual_entry_template.csv
+   - Helyszíni, manuálisan felvitt baseline mérés sablon.
+   - A programban legyen lehetőség sávonként/helyszínenként kézzel megadni:
+     normal_min_dbm, normal_max_dbm, measured_noise_floor_dbm, measured_max_peak_dbm,
+     rbw_hz, vbw_hz, antenna, mérőeszköz, downconverter profil, mérési idő.
+
+Implementációs kérés:
+- Importáld a reference_bands táblába az első CSV-t.
+- Legyen UI oldali szerkesztési lehetőség minden sávhoz: manuális helyszíni baseline értékek.
+- A helyszíni érték mindig írja felül az ideiglenes CSV értékeket, ha van aktív location_id + band_id baseline.
+- Az NMHH sávadat szolgáltatás/felhasználás jellegű referencia, nem helyszíni jelszint-mérés.
+- A jelszint referencia helyszínfüggő, ezért a site_baseline_manual_entry_template.csv logikája legyen elsőrendű.

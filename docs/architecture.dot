@@ -1,0 +1,43 @@
+digraph DiplomaArchitecture {
+  rankdir=LR;
+  graph [fontname="DejaVu Sans", fontsize=11, labelloc=t, label="Diploma RF monitoring platform – architecture"];
+  node [shape=box, style="rounded", fontname="DejaVu Sans", fontsize=10];
+  edge [fontname="DejaVu Sans", fontsize=9];
+
+  subgraph cluster_native {
+    label="Debian host – native hardware layer";
+    spectran [label="Aaronia SPECTRAN V6\n(hardware not tested)"];
+    aaronia [label="Aaronia RTSA API\n+ isolated probe"];
+    usrp [label="Ettus USRP\n(hardware not tested)"];
+    uhd [label="UHD driver\n+ isolated probe"];
+    sdrangel [label="sdrangelsrv\nREST control plane\nIQ data plane: skeleton"];
+    rf [label="C++ rf-agent\ncentral producer\nmock / replay / recording"];
+    spectran -> aaronia -> rf;
+    usrp -> uhd -> rf;
+    rf -> sdrangel [style=dashed, label="control"];
+  }
+
+  subgraph cluster_docker {
+    label="Docker Compose – portable application layer";
+    ingest [label="spectrum-ingest\nvalidate + bounded fan-out"];
+    backend [label="FastAPI backend\nRF proxy + sessions + ML + RAG"];
+    db [shape=cylinder, label="PostgreSQL\nTimescaleDB + pgvector"];
+    kismet [label="Kismet\nWi-Fi + Bluetooth"];
+    mqtt [label="Mosquitto"];
+    ollama [label="Ollama\nchat + embeddings\noptional"];
+    web [label="Nginx + frontend\nSpectrum / RF / Recordings / ML / Status"];
+
+    rf -> ingest [label="SpectrumFrame WS"];
+    ingest -> web [label="WebSocket"];
+    backend -> db [dir=both];
+    backend -> mqtt [dir=both];
+    kismet -> backend;
+    backend -> ollama [dir=both];
+    web -> backend [dir=both, label="REST"];
+  }
+
+  files [shape=folder, label="Host filesystem\nrecordings / uploads / Kismet / ML / backups"];
+  rf -> files;
+  backend -> files;
+  kismet -> files;
+}

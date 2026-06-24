@@ -1,0 +1,170 @@
+services:
+  backend:
+    environment:
+      RF_AGENT_URL: http://host.docker.internal:8765
+      RECORDINGS_DIR: /recordings
+      RECORDINGS_QUARANTINE_DIR: /recordings/.quarantine
+      RECORDINGS_MIN_FREE_BYTES: ${RECORDINGS_MIN_FREE_BYTES:-5368709120}
+      RECORDINGS_MAX_BYTES: ${RECORDINGS_MAX_BYTES:-21474836480}
+      RECORDINGS_MAX_DURATION_SECONDS: ${RECORDINGS_MAX_DURATION_SECONDS:-3600}
+      RECORDINGS_RETENTION_DAYS: ${RECORDINGS_RETENTION_DAYS:-30}
+    volumes:
+      - ${RECORDINGS_ROOT:-./recordings}:/recordings
+    group_add:
+      - "1000"
+
+  rf-agent:
+    build:
+      context: .
+      dockerfile: docker/rf-agent/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    # UHD discovery for X310/X410 uses broadcasts on the physical Ethernet
+    # interfaces, which requires the host network namespace.
+    network_mode: host
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/rfagent/.local:mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      RF_AGENT_BIND_ADDRESS: 0.0.0.0
+      RF_AGENT_PORT: 8765
+      RF_SOURCE_MODE: ${RF_SOURCE_MODE:-auto}
+      RF_HOTPLUG_POLL_MS: ${RF_HOTPLUG_POLL_MS:-5000}
+      RF_SENSOR_ID: ${RF_SENSOR_ID:-hp-demo-01}
+      RF_SESSION_ID: ${RF_SESSION_ID:-hp-demo-session}
+      RF_MOCK_POINT_COUNT: ${RF_MOCK_POINT_COUNT:-2048}
+      RF_MOCK_NOISE_FLOOR_DBM: ${RF_MOCK_NOISE_FLOOR_DBM:--95}
+      RF_MOCK_NOISE_DEVIATION_DB: ${RF_MOCK_NOISE_DEVIATION_DB:-2}
+      RF_MOCK_RANDOM_SEED: ${RF_MOCK_RANDOM_SEED:-23063}
+      RF_GAIN_DB: ${RF_GAIN_DB:-0}
+      FFT_MAX_FPS: ${FFT_MAX_FPS:-5}
+      FFT_SIZE: ${FFT_SIZE:-2048}
+      FFT_WINDOW: ${FFT_WINDOW:-hann}
+      FFT_AVERAGING: ${FFT_AVERAGING:-4}
+      FFT_CALIBRATION_OFFSET_DB: ${FFT_CALIBRATION_OFFSET_DB:-0}
+      FFT_PEAK_THRESHOLD_DB: ${FFT_PEAK_THRESHOLD_DB:-10}
+      RF_RECORDINGS_ROOT: /recordings
+      RF_REPLAY_DIRECTORY: ${RF_REPLAY_DIRECTORY:-}
+      RF_REPLAY_LOOP: ${RF_REPLAY_LOOP:-false}
+      RF_REPLAY_SPEED: ${RF_REPLAY_SPEED:-1}
+      ENABLE_AARONIA: ${ENABLE_AARONIA:-true}
+      AARONIA_PROBE_EXECUTABLE: /usr/local/bin/aaronia-probe
+      AARONIA_WORKER_EXECUTABLE: /usr/local/bin/aaronia-worker
+      AARONIA_PROBE_TIMEOUT_MS: ${AARONIA_PROBE_TIMEOUT_MS:-5000}
+      AARONIA_RTSA_LIBRARY_PATH: ${AARONIA_RTSA_LIBRARY_PATH:-/opt/aaronia-rtsa-suite/Aaronia-RTSA-Suite-PRO/libAaroniaRTSAAPI.so}
+      AARONIA_XML_PATH: ${AARONIA_XML_PATH:-/opt/aaronia-rtsa-suite/Aaronia-RTSA-Suite-PRO}
+      AARONIA_START_FREQUENCY_HZ: ${AARONIA_START_FREQUENCY_HZ:-75000000}
+      AARONIA_STOP_FREQUENCY_HZ: ${AARONIA_STOP_FREQUENCY_HZ:-6000000000}
+      AARONIA_RECEIVER_CLOCK: ${AARONIA_RECEIVER_CLOCK:-245MHz}
+      AARONIA_RBW_HZ: ${AARONIA_RBW_HZ:-100000}
+      AARONIA_REFERENCE_LEVEL_DBM: ${AARONIA_REFERENCE_LEVEL_DBM:--20}
+      AARONIA_MAX_SPECTRUM_POINTS: ${AARONIA_MAX_SPECTRUM_POINTS:-16384}
+      AARONIA_OVERVIEW_TARGET_POINTS: ${AARONIA_OVERVIEW_TARGET_POINTS:-512}
+      AARONIA_MAX_FPS: ${AARONIA_MAX_FPS:-10}
+      LD_LIBRARY_PATH: /opt/aaronia-rtsa-suite/lib
+      ENABLE_USRP: ${ENABLE_USRP:-true}
+      USRP_PROBE_EXECUTABLE: ${USRP_PROBE_EXECUTABLE:-/usr/local/bin/usrp-probe}
+      USRP_PROBE_TIMEOUT_MS: ${USRP_PROBE_TIMEOUT_MS:-5000}
+      USRP_DEVICE_ARGS: ${USRP_DEVICE_ARGS:-}
+      USRP_CENTER_FREQUENCY_HZ: ${USRP_CENTER_FREQUENCY_HZ:-100000000}
+      USRP_SAMPLE_RATE_HZ: ${USRP_SAMPLE_RATE_HZ:-2000000}
+      USRP_GAIN_DB: ${USRP_GAIN_DB:-20}
+      ENABLE_HACKRF: ${ENABLE_HACKRF:-true}
+      HACKRF_DEVICE_ARGS: ${HACKRF_DEVICE_ARGS:-}
+      HACKRF_CENTER_FREQUENCY_HZ: ${HACKRF_CENTER_FREQUENCY_HZ:-100000000}
+      HACKRF_SAMPLE_RATE_HZ: ${HACKRF_SAMPLE_RATE_HZ:-2000000}
+      HACKRF_GAIN_DB: ${HACKRF_GAIN_DB:-20}
+      NATIVE_AUDIO_UDP_ADDRESS: 127.0.0.1
+      SDRANGEL_ENABLED: ${SDRANGEL_ENABLED:-false}
+      SDRANGEL_API_URL: ${SDRANGEL_API_URL:-http://host.docker.internal:8091/sdrangel}
+      SDRANGEL_TIMEOUT_SECONDS: ${SDRANGEL_TIMEOUT_SECONDS:-5}
+      SDRANGEL_DEVICE_SET_INDEX: ${SDRANGEL_DEVICE_SET_INDEX:-0}
+      SDRANGEL_DEVICE_SETTINGS_KEY: ${SDRANGEL_DEVICE_SETTINGS_KEY:-}
+      SDRANGEL_DATA_PLANE_MODE: ${SDRANGEL_DATA_PLANE_MODE:-not_configured}
+      SDRANGEL_DATA_PLANE_ENDPOINT: ${SDRANGEL_DATA_PLANE_ENDPOINT:-}
+      SDRANGEL_IQ_SAMPLE_FORMAT: ${SDRANGEL_IQ_SAMPLE_FORMAT:-cf32_le}
+      SDRANGEL_IQ_SAMPLE_RATE_HZ: ${SDRANGEL_IQ_SAMPLE_RATE_HZ:-0}
+      SDRANGEL_AUDIO_UDP_ADDRESS: ${SDRANGEL_AUDIO_UDP_ADDRESS:-127.0.0.1}
+      SDRANGEL_AUDIO_UDP_PORT: ${SDRANGEL_AUDIO_UDP_PORT:-9998}
+      SDRANGEL_AUDIO_SAMPLE_RATE_HZ: ${SDRANGEL_AUDIO_SAMPLE_RATE_HZ:-48000}
+    volumes:
+      - ${RECORDINGS_ROOT:-./recordings}:/recordings
+      - type: bind
+        source: /opt/aaronia-rtsa-suite/Aaronia-RTSA-Suite-PRO
+        target: /opt/aaronia-rtsa-suite/Aaronia-RTSA-Suite-PRO
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /opt/aaronia-rtsa-suite/lib
+        target: /opt/aaronia-rtsa-suite/lib
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /dev/bus/usb
+        target: /dev/bus/usb
+        bind:
+          create_host_path: false
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    group_add:
+      - "1000"
+      - "${SDR_DEVICE_GID:-46}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    stop_grace_period: 15s
+    expose:
+      - "8765"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  kismet:
+    build:
+      context: .
+      dockerfile: docker/kismet/Dockerfile
+    restart: unless-stopped
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+    network_mode: host
+    privileged: true
+    environment:
+      # Alapértelmezetten a hci0 Bluetooth source aktív.
+      # Wi-Fi-hez monitor módú adaptert kell átadni.
+      # Több source: KISMET_SOURCES=hci0:name=bluetooth0,wlan1:name=wifi0
+      KISMET_SOURCES: ${KISMET_SOURCES:-}
+      KISMET_SOURCE: ${KISMET_SOURCE:-hci0}
+      KISMET_SOURCE_NAME: ${KISMET_SOURCE_NAME:-bluetooth0}
+      KISMET_HTTPD_USERNAME: ${KISMET_HTTPD_USERNAME:-kismet}
+      KISMET_HTTPD_PASSWORD: ${KISMET_HTTPD_PASSWORD:-change_me_kismet}
+      KISMET_SERVER_NAME: ${KISMET_SERVER_NAME:-Diploma Kismet Bluetooth RSSI}
+    volumes:
+      - ${KISMET_DATA_PATH:-kismet-data}:/data/kismet
+      - /run/dbus:/run/dbus:ro
+      - /sys/class/bluetooth:/sys/class/bluetooth:ro
+
+  spectrum-ingest:
+    environment:
+      RF_AGENT_URL: http://host.docker.internal:8765
+      RF_AGENT_WS_URL: ws://host.docker.internal:8765/ws/spectrum
+
+volumes:
+  kismet-data:
