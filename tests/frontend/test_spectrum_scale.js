@@ -73,4 +73,9 @@ eq(S.formatSpan(0.5), '500.0 kHz', 'formatSpan < 1 -> kHz');
 eq(S.formatSpan(5), '5.000 MHz', 'formatSpan MHz');
 eq(S.formatSpan(2000), '2.0000 GHz', 'formatSpan GHz');
 
+// --- fmtHz (Hz -> MHz/kHz) ---
+eq(S.fmtHz(NaN), '--', 'fmtHz NaN');
+eq(S.fmtHz(2_400_000_000), '2400.000000 MHz', 'fmtHz >= 1e6 -> MHz 6 tizedes');
+eq(S.fmtHz(12_500), '12.500 kHz', 'fmtHz < 1e6 -> kHz 3 tizedes');
+
 console.log(`spectrum scale: PASS (${passed} assertions)`);

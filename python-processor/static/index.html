@@ -394,10 +394,11 @@
 
 import * as apiClient from './api/api-client.js';
 import { escapeHtml } from './ui/html.js';
-import { FULL_MIN, FULL_MAX, NUM_BINS, DBM_MIN, DBM_MAX, MIN_SPAN, clamp, freqToBin, binToFreq, dbmToY, yToDbm, fullFreqToX, fullXToFreq, formatFreq, formatSpan, niceStep } from './ui/spectrum-scale.js';
+import { FULL_MIN, FULL_MAX, NUM_BINS, DBM_MIN, DBM_MAX, MIN_SPAN, clamp, freqToBin, binToFreq, dbmToY, yToDbm, fullFreqToX, fullXToFreq, formatFreq, formatSpan, niceStep, fmtHz } from './ui/spectrum-scale.js';
 import { referenceSummaryHtml, deviceReferenceDetailsHtml, missingReferenceDevicesHtml, detectionRowsHtml, wifiObservationsHtml, wifiSecurityEventsHtml, bluetoothObservationsHtml } from './ui/device-observation-view.js';
 import { bandPopoverHtml, nmhhPopoverHtml } from './ui/band-popover-view.js';
 import { peakOfArray, generateDemoSweep } from './ui/spectrum-data.js';
+import { inPlot, roundRect, dbmToColor } from './ui/canvas-util.js';
 
 // -----------------------------------------------------------------------------
 // CONFIG
@@ -685,7 +686,6 @@ function drawUnmeasuredOverlay(ctx,plot,full=false){
   }
   ctx.restore();
 }
-function inPlot(x,y,plot){ return x >= plot.left && x <= plot.left + plot.width && y >= plot.top && y <= plot.top + plot.height; }
 function toastMsg(msg){
   toast.textContent = msg;
   toast.classList.add('show');
@@ -1805,29 +1805,6 @@ function drawCursorAndSelection(){
     sCtx.fillText(txt, bx + 7, by + 5);
   }
   sCtx.restore();
-}
-function roundRect(ctx,x,y,w,h,r,fill,stroke){
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.arcTo(x+w,y,x+w,y+h,r);
-  ctx.arcTo(x+w,y+h,x,y+h,r);
-  ctx.arcTo(x,y+h,x,y,r);
-  ctx.arcTo(x,y,x+w,y,r);
-  ctx.closePath();
-  if(fill) ctx.fill();
-  if(stroke) ctx.stroke();
-}
-function dbmToColor(dbm){
-  if (!Number.isFinite(dbm)) return [0,0,0,0];
-  let t = (dbm - (-100)) / 72;
-  t = clamp(t,0,1);
-  let r,g,b;
-  if (t < .20) { r=0; g=0; b=Math.round(70 + t/.20*185); }
-  else if (t < .40) { r=0; g=Math.round((t-.20)/.20*255); b=255; }
-  else if (t < .62) { r=0; g=255; b=Math.round(255 - (t-.40)/.22*255); }
-  else if (t < .82) { r=Math.round((t-.62)/.20*255); g=255; b=0; }
-  else { r=255; g=Math.round(255 - (t-.82)/.18*205); b=0; }
-  return [r,g,b];
 }
 function ensureWaterfallBuffer(){
   const h = Math.max(10, waterfallCanvas.height - waterfallPlot.top - waterfallPlot.bottom);
@@ -3011,10 +2988,6 @@ function drawDemodPassband(){
 
 // --- Kétirányú szinkron ------------------------------------------------------
 
-function fmtHz(hz){
-  if (!Number.isFinite(hz)) return '--';
-  return hz >= 1e6 ? `${(hz / 1e6).toFixed(6)} MHz` : `${(hz / 1e3).toFixed(3)} kHz`;
-}
 
 function renderDemodReadout(){
   const el = document.getElementById('demodReadout');

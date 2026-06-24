@@ -55,3 +55,7 @@ export function niceStep(raw){
   else nice = 10;
   return nice * Math.pow(10, exp);
 }
+export function fmtHz(hz){
+  if (!Number.isFinite(hz)) return '--';
+  return hz >= 1e6 ? `${(hz / 1e6).toFixed(6)} MHz` : `${(hz / 1e3).toFixed(3)} kHz`;
+}

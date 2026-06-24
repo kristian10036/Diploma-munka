@@ -56,6 +56,7 @@ if command -v node >/dev/null 2>&1; then
     python-processor/static/spectrum-view-model.js
     python-processor/static/system-tabs.js
     python-processor/static/ui/band-popover-view.js
+    python-processor/static/ui/canvas-util.js
     python-processor/static/ui/device-observation-view.js
     python-processor/static/ui/html.js
     python-processor/static/ui/observation-format.js
@@ -63,6 +64,7 @@ if command -v node >/dev/null 2>&1; then
     python-processor/static/ui/spectrum-scale.js
     python-processor/static/viewport-controller.js
     tests/frontend/test_band_popover_view.js
+    tests/frontend/test_canvas_util.js
     tests/frontend/test_demod_passband.js
     tests/frontend/test_device_observation_view.js
     tests/frontend/test_html_util.js
@@ -84,6 +86,7 @@ if command -v node >/dev/null 2>&1; then
   node tests/frontend/test_spectrum_scale.js >/tmp/dm-spectrum-scale.log 2>&1 && pass "spectrum scale fixtures" || { cat /tmp/dm-spectrum-scale.log; fail "spectrum scale fixtures"; }
   node tests/frontend/test_band_popover_view.js >/tmp/dm-band-popover-view.log 2>&1 && pass "band popover view fixtures" || { cat /tmp/dm-band-popover-view.log; fail "band popover view fixtures"; }
   node tests/frontend/test_spectrum_data.js >/tmp/dm-spectrum-data.log 2>&1 && pass "spectrum data fixtures" || { cat /tmp/dm-spectrum-data.log; fail "spectrum data fixtures"; }
+  node tests/frontend/test_canvas_util.js >/tmp/dm-canvas-util.log 2>&1 && pass "canvas util fixtures" || { cat /tmp/dm-canvas-util.log; fail "canvas util fixtures"; }
   python - <<'PY' && pass "frontend inline JavaScript syntax" || fail "frontend inline JavaScript syntax"
 from pathlib import Path
 import re, subprocess, tempfile

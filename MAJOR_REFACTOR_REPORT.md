@@ -779,9 +779,52 @@ a 6. szelet jelenleg **commitolatlan** (a felhasználó kérésére a push/SSH
 beállítás félbehagyva – a remote SSH-ra állítva, kulcs generálva, de a
 publikus kulcs GitHubhoz adása + push a felhasználóra vár).
 
-### Következő lehetséges szeletek (sorrend még nyitott)
+### Elkészült: 7. szelet – canvas-util.js (tiszta canvas/geometria primitívek)
 
-A tiszta-logika kiemelések lényegében elfogytak. Ami maradt, az
-mutable-state store/controller (magasabb kockázat, mérsékelt strukturális
-haszon): (a) reference store; (b) session-controller; (c) az elhalasztott
-viewMin/viewMax store. Ezek külön döntést igényelnek.
+A megmaradt tiszta canvas-/geometria-segédfüggvények kiemelve.
+
+- Új fájl: `python-processor/static/ui/canvas-util.js` – `inPlot` (plot-on-
+  belüli hit-teszt), `roundRect` (lekerekített téglalap a megadott 2D-
+  contexten), `dbmToColor` (dBm → RGB a vízeséshez). Importálja a `clamp`-et
+  a spectrum-scale.js-ből; testek szó szerint változatlanok.
+- `index.html`: 3510 → 3487 sor. `inPlot` (9 hívás), `roundRect` (2),
+  `dbmToColor` (1) named importtal, érintetlen hívási helyekkel.
+- Új unit teszt: `tests/frontend/test_canvas_util.js` (18 assertion – inPlot
+  határok, dbmToColor NaN/tartomány/RGB-érvényesség, roundRect fake-context
+  hívássorrend + fill/stroke kapcsolás).
+- **Verifikáció (mind PASS):** `node --check`; 18-assertion unit teszt;
+  `offline-acceptance.sh` (0 FAIL); teljes `pytest` (132 passed); élő
+  Playwright smoke; **waterfall-render check**: a vízesés-canvas (amit a
+  `dbmToColor` táplál) demo módban 21 színnel renderel (nem üres). `GET
+  /ui/canvas-util.js` → 200.
+
+### Összegzés – Fázis 1 frontend modularizáció (7 szelet, + api-client)
+
+| Szelet | Modul | Jelleg | Unit assert |
+|---|---|---|---|
+| 1 | `ui/observation-format.js` | verbatim | 49 |
+| 2 | `ui/html.js` | verbatim | 9 |
+| 3 | `ui/device-observation-view.js` | pure/impure split | 32 |
+| 4 | `ui/spectrum-scale.js` | verbatim | 44 |
+| 5 | `ui/band-popover-view.js` | pure/impure split | 18 |
+| 6 | `ui/spectrum-data.js` | verbatim | 15 |
+| 7 | `ui/canvas-util.js` | verbatim | 18 |
+
+(+ `api/api-client.js`.) `index.html`: a `<script>` a `b1abb31` óta ~371
+sorral rövidebb; 7 új ES-modul a `ui/`-ban, 185 új unit assertion. Commit
+állapot: 1–5. szelet `6345eeb` (Claude), 6. szelet `7dc0d3b` (felhasználó);
+a 7. szelet (`canvas-util.js`) + a `fmtHz` áthelyezés jelenleg
+**commitolatlan**.
+
+### Maradék apró tiszta jelöltek (opcionális)
+
+Még tiszta, de kis/szórt: `fmtHz` (Hz-formázó, a spectrum-scale.js-be
+illene), `formatRetentionDate` (dátum), `sdrangelReasonText` (SDRangel
+státusz-szöveg). Külön-külön kevés értékűek.
+
+### Következő nagyobb szeletek (külön döntést igényelnek)
+
+A tiszta-logika kiemelések lényegében elfogytak. A maradék mutable-state
+store/controller (magasabb kockázat, mérsékelt strukturális haszon): (a)
+reference store; (b) session-controller; (c) az elhalasztott viewMin/viewMax
+store.
