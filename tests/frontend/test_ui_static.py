@@ -39,17 +39,18 @@ class UiParser(HTMLParser):
             self._group = False
 
 
-def _parse_static_ui() -> tuple[str, UiParser]:
+def _parse_static_ui() -> tuple[str, str, UiParser]:
     root = Path(__file__).resolve().parents[2]
     html = (root / "python-processor/static/index.html").read_text(encoding="utf-8")
+    css = (root / "python-processor/static/app.css").read_text(encoding="utf-8")
     parser = UiParser()
     parser.feed(html)
-    return html, parser
+    return html, css, parser
 
 
 @pytest.mark.unit
 def test_static_ui_contract() -> None:
-    html, parser = _parse_static_ui()
+    html, css, parser = _parse_static_ui()
 
     tabs = [button["text"] for button in parser.buttons if button["tab"]]
     assert tabs == ["Spektrum", "Wi-Fi", "Bluetooth / BLE", "RF Agent", "Felvételek", "ML osztályozás", "RAG", "Rendszerállapot"]
@@ -68,12 +69,12 @@ def test_static_ui_contract() -> None:
     assert "Ugrás csúcsra" not in html and "Csúcs mentése" not in html and "Overview / teljes tartomány" not in html
     assert "prompt(" not in html and "confirm(" not in html
     assert html.index('<div class="panel waterfall-panel" id="waterfallPanel">') < html.index('<div class="waterfall-control-strip">')
-    assert "grid-template-rows:auto minmax(330px,42vh) auto auto auto auto auto minmax(92px,12vh)" in html
-    assert "@media(max-height:760px)" in html and "grid-template-rows:auto 300px auto auto auto auto auto 90px" in html
-    assert "@media(max-width:760px)" in html and "grid-template-rows:auto 320px auto auto auto auto auto 95px" in html
-    assert "height:clamp(360px, 40vh, 500px)" in html
-    assert "margin-bottom:12px" in html
-    assert ".canvas-wrap{position:relative;flex:1;min-height:0" in html
+    assert "grid-template-rows:auto minmax(330px,42vh) auto auto auto auto auto minmax(92px,12vh)" in css
+    assert "@media(max-height:760px)" in css and "grid-template-rows:auto 300px auto auto auto auto auto 90px" in css
+    assert "@media(max-width:760px)" in css and "grid-template-rows:auto 320px auto auto auto auto auto 95px" in css
+    assert "height:clamp(360px, 40vh, 500px)" in css
+    assert "margin-bottom:12px" in css
+    assert ".canvas-wrap{position:relative;flex:1;min-height:0" in css
     assert '<th>Állapot</th>' in html
     assert '<th>Referencia</th>' in html
     assert '<th>Utolsó észlelés / age</th>' in html
