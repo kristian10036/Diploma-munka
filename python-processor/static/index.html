@@ -11,6 +11,7 @@
   <script src="/spectrum-view-model.js"></script>
   <script src="/maxhold-controller.js"></script>
   <script src="/demod-passband.js"></script>
+  <script src="/viewport-controller.js"></script>
 </head>
 <body>
   <div class="header">
@@ -486,6 +487,53 @@ const wCtx = waterfallCanvas.getContext('2d');
 const oCtx = overviewCanvas.getContext('2d');
 
 // -----------------------------------------------------------------------------
+// RF AGENT VIEWPORT CONTROLLER
+// -----------------------------------------------------------------------------
+// sendRequest: a controller nyers fetch Promise-t sosem kaphat - awaitolja a
+// választ, res.ok===false-on dob, sikeres ágon a parse-olt JSON-t adja tovább.
+async function sendRfAgentViewportRequest(request){
+  const response = await apiClient.updateRfAgentViewport(request);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = payload?.error?.message || payload?.detail || `HTTP ${response.status}`;
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+  }
+  return payload;
+}
+function handleViewportStateChange({state, detail}){
+  const STATES = ViewportController.STATES;
+  if (state === STATES.PENDING) {
+    sourceMessageValue.textContent = 'Viewport: nagyítás/mozgatás rögzítve, RF Agent hangolása ütemezve…';
+  } else if (state === STATES.RETUNING) {
+    const desiredHz = detail?.request?.desired_rbw_hz;
+    sourceMessageValue.textContent = Number.isFinite(desiredHz)
+      ? `Viewport: RF Agent hangolása… (kért felbontás ${formatSpan(desiredHz / 1e6)}/bin)`
+      : 'Viewport: RF Agent hangolása…';
+  } else if (state === STATES.WAITING_FOR_MATCHING_FRAME) {
+    const response = detail?.response || {};
+    const requestedPoints = detail?.request?.request?.maximum_points;
+    sourceMessageValue.textContent = response.status === 'constrained'
+      ? `Viewport elfogadva, korlátozva: ${response.num_points} pont (kért ${requestedPoints}) – várakozás az új frame-re…`
+      : 'Viewport elfogadva – várakozás az új felbontású frame-re…';
+  } else if (state === STATES.STREAMING) {
+    const desiredHz = detail?.request?.request?.desired_rbw_hz;
+    const actualHz = detail?.frame?.stepFrequencyHz;
+    sourceMessageValue.textContent = Number.isFinite(actualHz)
+      ? `Viewport szinkronban – tényleges ${formatSpan(actualHz / 1e6)}/bin${Number.isFinite(desiredHz) ? ` (kért ${formatSpan(desiredHz / 1e6)}/bin)` : ''}`
+      : 'Viewport szinkronban.';
+  } else if (state === STATES.ERROR) {
+    sourceMessageValue.textContent = `Viewport hangolási hiba: ${detail?.error?.message || 'ismeretlen hiba'}`;
+  }
+}
+const viewportController = new ViewportController.Controller({
+  sendRequest: sendRfAgentViewportRequest,
+  onStateChange: handleViewportStateChange,
+});
+function currentRfViewport(){
+  return {centerFrequencyHz: Math.round(center() * 1e6), spanHz: Math.round(span() * 1e6), mode: 'sweep'};
+}
+
+// -----------------------------------------------------------------------------
 // STATE
 // -----------------------------------------------------------------------------
 let viewMin = FULL_MIN;
@@ -954,7 +1002,17 @@ function renderSpectrumSourceStatus(source){
   const probe = source?.probe_message ? ` · ${source.probe_message}` : '';
   sourceMessageValue.textContent = `${source?.message || 'A forrás állapota nem érhető el'}${probe}`;
 }
+async function refreshRfAgentCapabilities(){
+  try {
+    const res = await apiClient.fetchRfAgentCapabilities();
+    const payload = await res.json();
+    viewportController.setCapabilities(res.ok ? payload : null);
+  } catch (err) {
+    viewportController.setCapabilities(null);
+  }
+}
 async function refreshSpectrumSourceStatus(showToast=false){
+  refreshRfAgentCapabilities();
   try {
     const res = await apiClient.fetchSpectrumSourceStatus();
     const payload = await res.json();
@@ -1270,6 +1328,7 @@ function setView(min, max, reason=''){
   updateReadouts();
   requestDraw();
   scheduleReferenceFetch();
+  viewportController.schedule(currentRfViewport());
   if (reason) toastMsg(reason);
 }
 function setCenterSpan(c, sp, reason=''){
@@ -1398,6 +1457,7 @@ function resizeCanvas(canvas){
 function resizeAll(){
   const changed = resizeCanvas(spectrumCanvas) | resizeCanvas(waterfallCanvas) | resizeCanvas(overviewCanvas);
   if (changed) waterfallBuffer = null;
+  viewportController.setCanvasPhysicalWidth(spectrumCanvas.width);
   requestDraw();
 }
 window.addEventListener('resize', resizeAll);
@@ -2350,6 +2410,7 @@ function acceptSweep(data){
   const sequence = sequenceTracker.observe(parsed);
   currentSpectrumFrame = parsed;
   lastFrameReceivedAt = Date.now();
+  viewportController.observeFrame(parsed, parsed.sourceType);
   if (!demoMode) {
     if (isSimulated && !allowSyntheticFallback) {
       dot.classList.remove('online');
@@ -2502,6 +2563,7 @@ spectrumCanvas.addEventListener('mousedown', (e)=>{
     startViewMin:viewMin,
     startViewMax:viewMax
   };
+  viewportController.beginInteraction();
   document.body.classList.add('no-select');
   spectrumCanvas.setPointerCapture?.(e.pointerId || 1);
   e.preventDefault();
@@ -2535,6 +2597,7 @@ window.addEventListener('mouseup', (e)=>{
       setCenterSpan(c, span(), 'Center áthelyezve overview alapján');
     }
   }
+  viewportController.endInteraction(currentRfViewport());
   drag = null;
   document.body.classList.remove('no-select');
   requestDraw();
@@ -2574,6 +2637,7 @@ overviewCanvas.addEventListener('mousedown', (e)=>{
   const p = canvasPoint(overviewCanvas, e);
   if (!inPlot(p.x,p.y,overviewPlot)) return;
   drag = { target:'overview', kind:'overview-select', startX:p.x, currentX:p.x, startY:p.y, currentY:p.y };
+  viewportController.beginInteraction();
   document.body.classList.add('no-select');
   e.preventDefault();
 });
@@ -2817,7 +2881,7 @@ referenceFile.addEventListener('change', async (e)=>{
   }
 });
 
-document.getElementById('btnApply').addEventListener('click', async ()=>{
+document.getElementById('btnApply').addEventListener('click', ()=>{
   const start = Number(startInput.value);
   const stop = Number(stopInput.value);
   if (!Number.isFinite(start) || !Number.isFinite(stop)) { toastMsg('Adj meg érvényes kezdő- és végfrekvenciát'); return; }
@@ -2825,30 +2889,6 @@ document.getElementById('btnApply').addEventListener('click', async ()=>{
 
   rangeInputsDirty = false;
   setView(start, stop);
-  const centerHz = Math.round(((start + stop) / 2) * 1e6);
-  const spanHz = Math.round((stop - start) * 1e6);
-  const requestId = `frontend-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-  try {
-    const response = await apiClient.updateRfAgentViewport({
-      request_id:requestId,
-      mode:'sweep',
-      center_frequency_hz:centerHz,
-      span_hz:spanHz,
-      maximum_points:NUM_BINS
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      const detail = payload?.error?.message || payload?.detail || `HTTP ${response.status}`;
-      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
-    }
-    toastMsg(payload.hardware_execution
-      ? 'Aaronia mérési tartomány átállítva'
-      : 'Megjelenített tartomány alkalmazva');
-  } catch (error) {
-    console.error('RF viewport configuration failed', error);
-    toastMsg(`A nézet átállt, de a hardver nem: ${error.message}`);
-  }
 });
 startInput.addEventListener('input', ()=>{ rangeInputsDirty = true; });
 stopInput.addEventListener('input', ()=>{ rangeInputsDirty = true; });

@@ -151,6 +151,9 @@ export function fetchReferenceDetail(id) {
 }
 
 // RF Agent/SDRangel
+export function fetchRfAgentCapabilities() {
+  return fetch('/api/rf-agent/capabilities');
+}
 export function updateRfAgentViewport(body) {
   return postJson('/api/rf-agent/source/viewport', body);
 }

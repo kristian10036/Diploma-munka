@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -65,6 +65,15 @@ class SdrangelDemodRequest(BaseModel):
     squelch_db: float | None = Field(default=None, ge=-150, le=20)
     audio_device: str | None = Field(default="default", max_length=128)
     volume: float = Field(default=1.0, ge=0.0, le=10.0)
+
+
+class ViewportRequest(BaseModel):
+    request_id: str = Field(min_length=1, max_length=128)
+    mode: Literal["fixed", "sweep"]
+    center_frequency_hz: int = Field(gt=0)
+    span_hz: int = Field(gt=0)
+    maximum_points: int = Field(ge=2)
+    desired_rbw_hz: float | None = None
 
 
 class SdrangelDemodUpdateRequest(BaseModel):

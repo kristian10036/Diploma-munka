@@ -12,7 +12,8 @@ from app.metrics import (SDRANGEL_IQ_PACKET_LOSS, SDRANGEL_IQ_PACKETS_DROPPED, S
 from app.rf_agent_client import RfAgentUnavailable, request_rf_agent, rf_agent_status
 from app.runtime import RF_AGENT_SETTINGS, SDRANGEL_IQ_DATA_PLANE
 from app.schemas import (RecordingStartRequest, ReplaySeekRequest, ReplayStartRequest,
-    SdrangelDemodRequest, SdrangelDemodUpdateRequest, SdrangelDeviceSetRequest, SdrangelTuneRequest)
+    SdrangelDemodRequest, SdrangelDemodUpdateRequest, SdrangelDeviceSetRequest, SdrangelTuneRequest,
+    ViewportRequest)
 
 router = APIRouter()
 
@@ -152,8 +153,8 @@ def stop_rf_agent_source():
 
 
 @router.post("/api/rf-agent/source/viewport")
-def configure_rf_agent_viewport(request: dict[str, Any]):
-    return _rf_proxy("/source/viewport", "POST", request)
+def configure_rf_agent_viewport(request: ViewportRequest):
+    return _rf_proxy("/source/viewport", "POST", request.model_dump(exclude_none=True))
 
 
 @router.get("/api/rf-agent/recordings")
