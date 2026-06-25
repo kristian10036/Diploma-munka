@@ -3,16 +3,16 @@
 A végpont csak proxy: a séma-validációt és a POST továbbítását ellenőrizzük,
 az RF-agent hívást mockoljuk (nem kell futó rf-agent).
 """
+
 import unittest
 from unittest.mock import patch
-
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 from app.application import app
 from app.routers.rf_agent import configure_rf_agent_viewport
 from app.schemas import ViewportRequest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 VALID = {
     "request_id": "frontend-1700000000-abc123",
@@ -33,11 +33,17 @@ class ConfigureRfAgentViewportTest(unittest.TestCase):
             captured["method"] = method
             captured["body"] = body
             return {
-                "schema_version": 1, "request_id": body["request_id"], "status": "accepted",
-                "mode": body["mode"], "center_frequency_hz": body["center_frequency_hz"],
-                "span_hz": body["span_hz"], "start_frequency_hz": 432_920_000,
-                "stop_frequency_hz": 434_920_000, "step_frequency_hz": 417,
-                "num_points": body["maximum_points"], "source_type": "mock",
+                "schema_version": 1,
+                "request_id": body["request_id"],
+                "status": "accepted",
+                "mode": body["mode"],
+                "center_frequency_hz": body["center_frequency_hz"],
+                "span_hz": body["span_hz"],
+                "start_frequency_hz": 432_920_000,
+                "stop_frequency_hz": 434_920_000,
+                "step_frequency_hz": 417,
+                "num_points": body["maximum_points"],
+                "source_type": "mock",
                 "hardware_execution": False,
             }
 

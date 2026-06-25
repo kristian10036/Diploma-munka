@@ -1,0 +1,5 @@
+# Dev/tooling deps for scripts/offline-acceptance.sh and the lint/format gate.
+# Not part of any runtime image; install alongside python-processor/requirements.txt
+# (and spectrum-ingest/requirements.txt, ml/requirements-training.txt as needed).
+PyYAML==6.0.3
+ruff==0.15.19

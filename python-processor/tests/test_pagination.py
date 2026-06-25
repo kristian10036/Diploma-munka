@@ -1,6 +1,6 @@
+import unittest
 from datetime import datetime, timezone
 from uuid import UUID
-import unittest
 
 from app.utils.pagination import decode_time_uuid_cursor, encode_time_uuid_cursor
 

@@ -4,10 +4,15 @@ import asyncio
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Sequence
+from typing import Any, Awaitable, Callable
 
-from app.metrics import (ANOMALY_DETECTIONS_TOTAL, ANOMALY_INFERENCE_SECONDS, ML_INFERENCE_SECONDS,
-    ML_QUEUE_DEPTH, ML_QUEUE_DROPS)
+from app.metrics import (
+    ANOMALY_DETECTIONS_TOTAL,
+    ANOMALY_INFERENCE_SECONDS,
+    ML_INFERENCE_SECONDS,
+    ML_QUEUE_DEPTH,
+    ML_QUEUE_DROPS,
+)
 
 from .spectrum import Detection, SpectrumAnomalyDetector
 

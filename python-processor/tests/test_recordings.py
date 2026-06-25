@@ -36,9 +36,7 @@ class RecordingFormatTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_mock_iq_sigmf_roundtrip_and_checksum(self):
-        metadata = create_mock_iq_recording(
-            self.settings, recording_id="iq-test", sample_count=256
-        )
+        metadata = create_mock_iq_recording(self.settings, recording_id="iq-test", sample_count=256)
         self.assertEqual(metadata["recording_type"], "iq")
         self.assertTrue(metadata["mock"])
         reader = SigMfRecordingReader(self.settings.root / "iq-test")
@@ -46,9 +44,7 @@ class RecordingFormatTests(unittest.TestCase):
         samples = list(reader.samples())
         self.assertEqual(len(samples), 256)
         self.assertAlmostEqual(abs(samples[0]), 1.0, places=5)
-        sigmf = json.loads(
-            (self.settings.root / "iq-test" / "iq-test.sigmf-meta").read_text()
-        )
+        sigmf = json.loads((self.settings.root / "iq-test" / "iq-test.sigmf-meta").read_text())
         self.assertEqual(sigmf["global"]["core:datatype"], "cf32_le")
         self.assertEqual(sigmf["captures"][0]["core:frequency"], 100_000_000)
 
@@ -78,21 +74,24 @@ class RecordingFormatTests(unittest.TestCase):
 
     def test_catalog_supports_legacy_spectrum_and_new_types(self):
         create_mock_iq_recording(self.settings, recording_id="iq-item", sample_count=16)
-        create_mock_audio_recording(
-            self.settings, recording_id="audio-item", duration_seconds=0.01
-        )
+        create_mock_audio_recording(self.settings, recording_id="audio-item", duration_seconds=0.01)
         spectrum = self.settings.root / "legacy-spectrum"
         spectrum.mkdir()
         frame_file = spectrum / "frames.ndjson"
         frame_file.write_text('{"schema_version":1}\n')
         import hashlib
+
         checksum = hashlib.sha256(frame_file.read_bytes()).hexdigest()
-        (spectrum / "metadata.json").write_text(json.dumps({
-            "recording_id": "legacy-spectrum",
-            "frame_file": "frames.ndjson",
-            "checksum_sha256": checksum,
-            "started_at": "2026-01-01T00:00:00Z",
-        }))
+        (spectrum / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "recording_id": "legacy-spectrum",
+                    "frame_file": "frames.ndjson",
+                    "checksum_sha256": checksum,
+                    "started_at": "2026-01-01T00:00:00Z",
+                }
+            )
+        )
         items = RecordingCatalog(self.settings).list(verify_checksums=True)
         by_id = {item["recording_id"]: item for item in items}
         self.assertEqual(by_id["legacy-spectrum"]["recording_type"], "spectrum")

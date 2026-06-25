@@ -4,7 +4,6 @@ import os
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 from .config import RecordingSettings
@@ -85,7 +84,11 @@ class RecordingStorage:
         cutoff = current - timedelta(days=self.settings.retention_days)
         items: list[dict[str, Any]] = []
         for path in sorted(self.settings.root.iterdir()):
-            if not path.is_dir() or path == self.settings.quarantine_dir or path.name.startswith("."):
+            if (
+                not path.is_dir()
+                or path == self.settings.quarantine_dir
+                or path.name.startswith(".")
+            ):
                 continue
             modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
             if modified >= cutoff:

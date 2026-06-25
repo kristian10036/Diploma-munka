@@ -68,7 +68,9 @@ class RecordingCatalog:
             item.setdefault("recording_id", directory.name)
             item.setdefault("recording_type", "spectrum")
             item.setdefault("status", "completed")
-            item["checksum_status"] = self._verify(directory, item) if verify_checksums else "not_checked"
+            item["checksum_status"] = (
+                self._verify(directory, item) if verify_checksums else "not_checked"
+            )
             items.append(item)
         items.sort(key=lambda value: str(value.get("started_at") or ""), reverse=True)
         return items[: max(1, min(limit, 1000))]

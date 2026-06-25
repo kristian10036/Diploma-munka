@@ -35,11 +35,17 @@ def test_kismet_wifi_ap_type_from_access_point_role():
 def test_kismet_wifi_mesh_and_adhoc_types():
     fallback = datetime.now(timezone.utc)
 
-    assert normalize_kismet_row(
-        {"kismet.device.base.macaddr": "11:22:33:44:55:67", "dot11.device.role": "mesh node"},
-        fallback,
-    )["device_type"] == "bridge/mesh"
-    assert normalize_kismet_row(
-        {"kismet.device.base.macaddr": "11:22:33:44:55:68", "dot11.device.type": "IBSS"},
-        fallback,
-    )["device_type"] == "ad-hoc"
+    assert (
+        normalize_kismet_row(
+            {"kismet.device.base.macaddr": "11:22:33:44:55:67", "dot11.device.role": "mesh node"},
+            fallback,
+        )["device_type"]
+        == "bridge/mesh"
+    )
+    assert (
+        normalize_kismet_row(
+            {"kismet.device.base.macaddr": "11:22:33:44:55:68", "dot11.device.type": "IBSS"},
+            fallback,
+        )["device_type"]
+        == "ad-hoc"
+    )

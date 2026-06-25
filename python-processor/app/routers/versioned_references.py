@@ -13,7 +13,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from psycopg.types.json import Jsonb
 
-from app.db import validated_optional_uuid, write_audit_event, get_db
+from app.db import get_db, validated_optional_uuid, write_audit_event
 from app.metrics import REFERENCE_IMPORTED_POINTS, REFERENCE_IMPORTS_TOTAL
 from app.services.persistence import ensure_location
 from app.services.references import ReferenceImportError, importer_for, peak_preserving_resample
@@ -31,8 +31,14 @@ def _read_upload(file: UploadFile) -> tuple[str, bytes]:
     payload = read_bounded_upload(
         file,
         max_bytes=MAX_REFERENCE_BYTES,
-        empty_detail={"code": "empty_reference_file", "message": "Üres referencia nem importálható."},
-        too_large_detail={"code": "reference_too_large", "message": "A referencia legfeljebb 64 MiB lehet."},
+        empty_detail={
+            "code": "empty_reference_file",
+            "message": "Üres referencia nem importálható.",
+        },
+        too_large_detail={
+            "code": "reference_too_large",
+            "message": "A referencia legfeljebb 64 MiB lehet.",
+        },
     )
     return filename, payload
 
@@ -64,7 +70,8 @@ def inspect_reference(file: UploadFile = File(...)) -> dict[str, Any]:
         if result.get("supported") is False:
             raise ReferenceImportError(
                 "unsupported_peak_format",
-                "A .peak fájl közvetlenül nem importálható. Exportálj CSV-t az OSCOR Data Viewerből.",
+                "A .peak fájl közvetlenül nem importálható. "
+                "Exportálj CSV-t az OSCOR Data Viewerből.",
             )
         return {"filename": filename, **result}
     except ReferenceImportError as exc:
@@ -93,37 +100,66 @@ def import_versioned_reference(
     filename, payload = _read_upload(file)
     creation_source = creation_source.strip().casefold()
     if creation_source not in CREATION_SOURCES:
-        raise HTTPException(status_code=422, detail={"code": "invalid_creation_source", "message": "Érvénytelen létrehozási forrás."})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_creation_source",
+                "message": "Érvénytelen létrehozási forrás.",
+            },
+        )
     measured = _parse_datetime(measured_at, "measured_at")
     starts = _parse_datetime(valid_from, "valid_from")
     ends = _parse_datetime(valid_until, "valid_until")
     if starts and ends and starts >= ends:
-        raise HTTPException(status_code=422, detail={"code": "invalid_validity_window", "message": "A valid_until legyen későbbi a valid_from értéknél."})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_validity_window",
+                "message": "A valid_until legyen későbbi a valid_from értéknél.",
+            },
+        )
     try:
         importer = importer_for(filename, file.content_type or "", payload[:512])
         imported = importer.import_points(payload)
         points = peak_preserving_resample(imported.points, MAX_REFERENCE_POINTS)
     except ReferenceImportError as exc:
-        REFERENCE_IMPORTS_TOTAL.labels(format=Path(filename).suffix.casefold().lstrip(".") or "unknown", result="rejected").inc()
+        REFERENCE_IMPORTS_TOTAL.labels(
+            format=Path(filename).suffix.casefold().lstrip(".") or "unknown", result="rejected"
+        ).inc()
         raise _import_error(exc) from exc
 
     key = (reference_key or Path(filename).stem).strip()
     if not REFERENCE_KEY_PATTERN.fullmatch(key):
-        raise HTTPException(status_code=422, detail={"code": "invalid_reference_key", "message": "Érvénytelen referenciaazonosító."})
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_reference_key", "message": "Érvénytelen referenciaazonosító."},
+        )
     frequencies = [point[0] for point in points]
-    differences = {frequencies[index] - frequencies[index - 1] for index in range(1, len(frequencies))}
+    differences = {
+        frequencies[index] - frequencies[index - 1] for index in range(1, len(frequencies))
+    }
     step = next(iter(differences)) if len(differences) == 1 else None
     checksum = hashlib.sha256(payload).hexdigest()
     metadata = dict(imported.metadata)
-    metadata.update({"original_point_count": len(imported.points), "resampled": len(points) != len(imported.points)})
+    metadata.update(
+        {
+            "original_point_count": len(imported.points),
+            "resampled": len(points) != len(imported.points),
+        }
+    )
 
     with get_db() as conn:
         with conn.cursor() as cur:
-            location_id = ensure_location(cur, location_name.strip()) if location_name and location_name.strip() else None
+            location_id = (
+                ensure_location(cur, location_name.strip())
+                if location_name and location_name.strip()
+                else None
+            )
             # Prevent two concurrent imports from selecting the same next version.
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (key,))
             cur.execute(
-                "SELECT COALESCE(MAX(version), 0) + 1 AS version FROM spectrum_references WHERE reference_key=%s",
+                "SELECT COALESCE(MAX(version), 0) + 1 AS version FROM spectrum_references "
+                "WHERE reference_key=%s",
                 (key,),
             )
             version = cur.fetchone()["version"]
@@ -146,10 +182,31 @@ def import_versioned_reference(
                 RETURNING *
                 """,
                 (
-                    key, version, location_id, location_name, device_name, source_type, antenna,
-                    downconverter_profile, frequencies[0], frequencies[-1], step, rbw_hz, vbw_hz,
-                    measured, operator_name, notes, checksum, activate, starts, ends, creation_source,
-                    filename, imported.import_format, len(points), Jsonb(metadata),
+                    key,
+                    version,
+                    location_id,
+                    location_name,
+                    device_name,
+                    source_type,
+                    antenna,
+                    downconverter_profile,
+                    frequencies[0],
+                    frequencies[-1],
+                    step,
+                    rbw_hz,
+                    vbw_hz,
+                    measured,
+                    operator_name,
+                    notes,
+                    checksum,
+                    activate,
+                    starts,
+                    ends,
+                    creation_source,
+                    filename,
+                    imported.import_format,
+                    len(points),
+                    Jsonb(metadata),
                 ),
             )
             reference = cur.fetchone()
@@ -164,10 +221,20 @@ def import_versioned_reference(
                 """,
                 [
                     (
-                        point_time, str(reference["id"]), location_id, location_name or "unspecified",
-                        device_name, filename, frequency, frequency, power,
-                        round(rbw_hz) if rbw_hz else None, round(vbw_hz) if vbw_hz else None,
-                        antenna, downconverter_profile, Jsonb({"import_format": imported.import_format}),
+                        point_time,
+                        str(reference["id"]),
+                        location_id,
+                        location_name or "unspecified",
+                        device_name,
+                        filename,
+                        frequency,
+                        frequency,
+                        power,
+                        round(rbw_hz) if rbw_hz else None,
+                        round(vbw_hz) if vbw_hz else None,
+                        antenna,
+                        downconverter_profile,
+                        Jsonb({"import_format": imported.import_format}),
                     )
                     for frequency, power in points
                 ],
@@ -180,7 +247,12 @@ def import_versioned_reference(
         "spectrum.reference.imported",
         entity_type="spectrum_reference",
         entity_id=str(reference["id"]),
-        details={"reference_key": key, "version": version, "format": imported.import_format, "checksum_sha256": checksum},
+        details={
+            "reference_key": key,
+            "version": version,
+            "format": imported.import_format,
+            "checksum_sha256": checksum,
+        },
     )
     return reference
 
@@ -211,7 +283,8 @@ def list_versioned_references(
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"SELECT * FROM spectrum_references{where} ORDER BY reference_key, version DESC LIMIT %s",
+                f"SELECT * FROM spectrum_references{where} "
+                "ORDER BY reference_key, version DESC LIMIT %s",
                 parameters,
             )
             rows = cur.fetchall()
@@ -227,7 +300,8 @@ def get_versioned_reference(reference_uuid: str, include_points: bool = False):
             reference = cur.fetchone()
             if reference and include_points:
                 cur.execute(
-                    "SELECT COALESCE(actual_rf_frequency_hz, measured_frequency_hz) AS frequency_hz, power_dbm "
+                    "SELECT COALESCE(actual_rf_frequency_hz, measured_frequency_hz) "
+                    "AS frequency_hz, power_dbm "
                     "FROM reference_spectrum_points WHERE reference_id=%s "
                     "ORDER BY COALESCE(actual_rf_frequency_hz, measured_frequency_hz)",
                     (identifier,),
@@ -258,7 +332,9 @@ def activate_versioned_reference(reference_uuid: str):
             cur.execute("SELECT * FROM spectrum_references WHERE id=%s", (identifier,))
             row = cur.fetchone()
         conn.commit()
-    write_audit_event("spectrum.reference.activated", entity_type="spectrum_reference", entity_id=identifier)
+    write_audit_event(
+        "spectrum.reference.activated", entity_type="spectrum_reference", entity_id=identifier
+    )
     return row
 
 
@@ -268,14 +344,17 @@ def deactivate_versioned_reference(reference_uuid: str):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE spectrum_references SET is_active=false, updated_at=now() WHERE id=%s RETURNING *",
+                "UPDATE spectrum_references SET is_active=false, updated_at=now() "
+                "WHERE id=%s RETURNING *",
                 (identifier,),
             )
             row = cur.fetchone()
         conn.commit()
     if not row:
         raise HTTPException(status_code=404, detail="reference_not_found")
-    write_audit_event("spectrum.reference.deactivated", entity_type="spectrum_reference", entity_id=identifier)
+    write_audit_event(
+        "spectrum.reference.deactivated", entity_type="spectrum_reference", entity_id=identifier
+    )
     return row
 
 
@@ -286,27 +365,56 @@ def export_versioned_reference(reference_uuid: str, format: str = "json"):
     filename = f"{reference['reference_key']}_v{reference['version']}"
     normalized_format = format.casefold()
     if normalized_format == "json":
-        body = json.dumps({"metadata": reference, "points": points}, default=str, ensure_ascii=False, indent=2)
-        return Response(body, media_type="application/json", headers={"Content-Disposition": f'attachment; filename="{filename}.json"'})
+        body = json.dumps(
+            {"metadata": reference, "points": points}, default=str, ensure_ascii=False, indent=2
+        )
+        return Response(
+            body,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.json"'},
+        )
     if normalized_format == "csv":
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=[
-            "reference_id", "reference_key", "version", "layer_type", "display_color",
-            "location_name", "device_name", "measured_at", "frequency_hz", "power_dbm",
-        ])
+        writer = csv.DictWriter(
+            output,
+            fieldnames=[
+                "reference_id",
+                "reference_key",
+                "version",
+                "layer_type",
+                "display_color",
+                "location_name",
+                "device_name",
+                "measured_at",
+                "frequency_hz",
+                "power_dbm",
+            ],
+        )
         writer.writeheader()
         for point in points:
-            writer.writerow({
-                "reference_id": reference["id"],
-                "reference_key": reference["reference_key"],
-                "version": reference["version"],
-                "layer_type": "reference",
-                "display_color": reference.get("metadata", {}).get("display_color", "#ff5252"),
-                "location_name": reference.get("location_name"),
-                "device_name": reference.get("device_name"),
-                "measured_at": reference.get("measured_at"),
-                "frequency_hz": point["frequency_hz"],
-                "power_dbm": point["power_dbm"],
-            })
-        return Response(output.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'})
-    raise HTTPException(status_code=422, detail={"code": "unsupported_export_format", "message": "Csak json vagy csv export támogatott."})
+            writer.writerow(
+                {
+                    "reference_id": reference["id"],
+                    "reference_key": reference["reference_key"],
+                    "version": reference["version"],
+                    "layer_type": "reference",
+                    "display_color": reference.get("metadata", {}).get("display_color", "#ff5252"),
+                    "location_name": reference.get("location_name"),
+                    "device_name": reference.get("device_name"),
+                    "measured_at": reference.get("measured_at"),
+                    "frequency_hz": point["frequency_hz"],
+                    "power_dbm": point["power_dbm"],
+                }
+            )
+        return Response(
+            output.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
+        )
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "code": "unsupported_export_format",
+            "message": "Csak json vagy csv export támogatott.",
+        },
+    )

@@ -42,7 +42,10 @@ def test_wifi_history_skips_unchanged_snapshot_inside_heartbeat():
         "identity_confidence": "high",
     }
 
-    assert _wifi_history_needed(FakeCursor(previous), None, "Lab", "AA:BB:CC:DD:EE:FF", fields) is False
+    assert (
+        _wifi_history_needed(FakeCursor(previous), None, "Lab", "AA:BB:CC:DD:EE:FF", fields)
+        is False
+    )
 
 
 def test_wifi_history_uses_rssi_delta_threshold():
@@ -69,20 +72,26 @@ def test_wifi_history_uses_rssi_delta_threshold():
         "identity_confidence": "high",
     }
 
-    assert _wifi_history_needed(
-        FakeCursor(previous),
-        None,
-        "Lab",
-        "AA:BB:CC:DD:EE:FF",
-        {**base_fields, "signal_dbm": -57.0},
-    ) is False
-    assert _wifi_history_needed(
-        FakeCursor(previous),
-        None,
-        "Lab",
-        "AA:BB:CC:DD:EE:FF",
-        {**base_fields, "signal_dbm": -60.0},
-    ) is True
+    assert (
+        _wifi_history_needed(
+            FakeCursor(previous),
+            None,
+            "Lab",
+            "AA:BB:CC:DD:EE:FF",
+            {**base_fields, "signal_dbm": -57.0},
+        )
+        is False
+    )
+    assert (
+        _wifi_history_needed(
+            FakeCursor(previous),
+            None,
+            "Lab",
+            "AA:BB:CC:DD:EE:FF",
+            {**base_fields, "signal_dbm": -60.0},
+        )
+        is True
+    )
 
 
 def test_wifi_history_heartbeat_creates_sample():
@@ -110,7 +119,9 @@ def test_wifi_history_heartbeat_creates_sample():
         "identity_confidence": "high",
     }
 
-    assert _wifi_history_needed(FakeCursor(previous), None, "Lab", "AA:BB:CC:DD:EE:FF", fields) is True
+    assert (
+        _wifi_history_needed(FakeCursor(previous), None, "Lab", "AA:BB:CC:DD:EE:FF", fields) is True
+    )
 
 
 def test_bluetooth_history_skips_unchanged_snapshot_inside_heartbeat():
@@ -146,5 +157,7 @@ def test_bluetooth_history_skips_unchanged_snapshot_inside_heartbeat():
         "identity_confidence": "high",
     }
 
-    assert _bluetooth_history_needed(FakeCursor(previous), None, "Lab", "AA:BB:CC:DD:EE:FF", fields) is False
-
+    assert (
+        _bluetooth_history_needed(FakeCursor(previous), None, "Lab", "AA:BB:CC:DD:EE:FF", fields)
+        is False
+    )

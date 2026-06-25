@@ -12,18 +12,31 @@ import re
 import sys
 from pathlib import Path
 
-
 BAND_RE = re.compile(
     r"^\s*(?P<row>\d+)\s+(?P<start>\d[\d .]*?(?:,\d+)?)\s*[–-]\s*"
     r"(?P<end>\d[\d .]*?(?:,\d+)?)\s*(?P<unit>kHz|MHz|GHz)\b"
 )
 PAGE_NO_RE = re.compile(r"^\s*\d+\s*$")
-TABLE_HEADER_WORDS = ("Nemzeti felosztás", "Frekvenciasávok használati szabályai", "További szabály")
+TABLE_HEADER_WORDS = (
+    "Nemzeti felosztás",
+    "Frekvenciasávok használati szabályai",
+    "További szabály",
+)
 ROW_RE = re.compile(r"^\s*\d+\s+(?P<body>.*)$")
 APPLICATION_RE = re.compile(r"(?:^|\s)(?:[123]|-)\s+[KTÜ]\s+(?P<name>.*?)(?=\s{2,}|$)")
 IGNORED_PREFIXES = {
-    "N", "P", "E", "PN", "NJE", "NJÖ", "RRE", "SRD",
-    "1", "2", "3", "-",
+    "N",
+    "P",
+    "E",
+    "PN",
+    "NJE",
+    "NJÖ",
+    "RRE",
+    "SRD",
+    "1",
+    "2",
+    "3",
+    "-",
 }
 
 
@@ -50,7 +63,11 @@ def concise_name(name: str, start_hz: int, end_hz: int) -> str:
     lowered = value.casefold()
     if not value or value == "Alkalmazás" or any(word in value for word in TABLE_HEADER_WORDS):
         return ""
-    if value in {"Műholdas", "MHz)"} or value.count("(") != value.count(")") or value.endswith(("–", "-")):
+    if (
+        value in {"Műholdas", "MHz)"}
+        or value.count("(") != value.count(")")
+        or value.endswith(("–", "-"))
+    ):
         return ""
     if "szélessávú adatátvitel" in lowered and start_hz < 2_483_500_000 and end_hz > 2_400_000_000:
         return "Wi-Fi és Bluetooth"
@@ -144,7 +161,12 @@ def main() -> None:
         raise SystemExit("usage: extract-nmhh-frequency-bands.py INPUT.txt OUTPUT.json")
     source, target = map(Path, sys.argv[1:])
     bands = extract(source.read_text(encoding="utf-8", errors="replace"))
-    target.write_text(json.dumps({"schema_version": 1, "bands": bands}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    target.write_text(
+        json.dumps(
+            {"schema_version": 1, "bands": bands}, ensure_ascii=False, separators=(",", ":")
+        ),
+        encoding="utf-8",
+    )
     print(f"wrote {len(bands)} bands to {target}")
 
 

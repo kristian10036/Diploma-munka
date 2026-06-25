@@ -79,20 +79,45 @@ class SpectrumIngestWebSocketSource(SpectrumSource):
             payload = payload.decode("utf-8")
         value = json.loads(payload)
         required = (
-            "schema_version", "source_type", "source_device", "device_model", "measurement_mode", "timestamp", "sequence",
-            "start_frequency_hz", "step_frequency_hz", "num_points", "point_count", "powers_dbm", "flags",
+            "schema_version",
+            "source_type",
+            "source_device",
+            "device_model",
+            "measurement_mode",
+            "timestamp",
+            "sequence",
+            "start_frequency_hz",
+            "step_frequency_hz",
+            "num_points",
+            "point_count",
+            "powers_dbm",
+            "flags",
         )
         if not isinstance(value, dict) or any(field not in value for field in required):
             raise ValueError("invalid SpectrumFrame fields")
         powers = value["powers_dbm"]
         count = value["num_points"]
-        if value["schema_version"] != 1 or value["point_count"] != count or not isinstance(powers, list) or count != len(powers):
+        if (
+            value["schema_version"] != 1
+            or value["point_count"] != count
+            or not isinstance(powers, list)
+            or count != len(powers)
+        ):
             raise ValueError("invalid SpectrumFrame shape")
-        if count < 2 or count > 65_536 or not all(isinstance(power, (int, float)) for power in powers):
+        if (
+            count < 2
+            or count > 65_536
+            or not all(isinstance(power, (int, float)) for power in powers)
+        ):
             raise ValueError("invalid SpectrumFrame powers")
         start = int(value["start_frequency_hz"])
         step = int(value["step_frequency_hz"])
-        if start < 0 or step <= 0 or not isinstance(value["sequence"], int) or value["sequence"] < 0:
+        if (
+            start < 0
+            or step <= 0
+            or not isinstance(value["sequence"], int)
+            or value["sequence"] < 0
+        ):
             raise ValueError("invalid SpectrumFrame frequency or sequence")
         timestamp = datetime.fromisoformat(str(value["timestamp"]).replace("Z", "+00:00"))
         points = tuple(

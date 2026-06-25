@@ -1,14 +1,29 @@
 import unittest
 
-from app.assistant import (AssistantSettings, build_grounded_prompt, is_mac_inventory_question,
-                           model_is_installed, normalize_ollama_answer, select_context_kinds)
+from app.assistant import (
+    AssistantSettings,
+    build_grounded_prompt,
+    is_mac_inventory_question,
+    model_is_installed,
+    normalize_ollama_answer,
+    select_context_kinds,
+)
 
 
 class AssistantTest(unittest.TestCase):
     def test_selects_relevant_context_without_keyword_sql(self):
-        self.assertEqual(select_context_kinds("Milyen Wi-Fi és Bluetooth eszközök voltak?"), ("wifi", "bluetooth"))
-        self.assertEqual(select_context_kinds("Adj teljes összefoglalót"), ("sessions", "wifi", "bluetooth", "peaks", "anomalies"))
-        self.assertEqual(select_context_kinds("Foglald össze az adatokat"), ("sessions", "wifi", "bluetooth", "peaks", "anomalies"))
+        self.assertEqual(
+            select_context_kinds("Milyen Wi-Fi és Bluetooth eszközök voltak?"),
+            ("wifi", "bluetooth"),
+        )
+        self.assertEqual(
+            select_context_kinds("Adj teljes összefoglalót"),
+            ("sessions", "wifi", "bluetooth", "peaks", "anomalies"),
+        )
+        self.assertEqual(
+            select_context_kinds("Foglald össze az adatokat"),
+            ("sessions", "wifi", "bluetooth", "peaks", "anomalies"),
+        )
 
     def test_prompt_requires_grounding_and_source_ids(self):
         prompt = build_grounded_prompt(
@@ -20,7 +35,16 @@ class AssistantTest(unittest.TestCase):
         self.assertIn("record_type:record_id", prompt)
         self.assertIn("Hungarian (hu)", prompt)
         self.assertIn("a-1", prompt)
-        self.assertLessEqual(len(build_grounded_prompt("Mi történt?", {"wifi": [{"id": str(i), "ssid": "x" * 1000} for i in range(20)]}, [])), 7000)
+        self.assertLessEqual(
+            len(
+                build_grounded_prompt(
+                    "Mi történt?",
+                    {"wifi": [{"id": str(i), "ssid": "x" * 1000} for i in range(20)]},
+                    [],
+                )
+            ),
+            7000,
+        )
 
     def test_disabled_status_is_generation_only(self):
         settings = AssistantSettings(False, "http://ollama:11434", "", 20, 10)
@@ -50,10 +74,10 @@ class AssistantTest(unittest.TestCase):
         self.assertFalse(is_mac_inventory_question("Hány Bluetooth MAC-cím van?"))
         self.assertFalse(is_mac_inventory_question("Milyen Wi-Fi eszközök láthatók?"))
 
-
     def test_normalizes_json_wrapped_model_answer(self):
         self.assertEqual(normalize_ollama_answer('{"answer":"Emberi válasz."}'), "Emberi válasz.")
         self.assertEqual(normalize_ollama_answer("Egyszerű szöveg."), "Egyszerű szöveg.")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,12 +1,19 @@
-import math
-import unittest
 import io
 import json
+import math
+import unittest
 import urllib.error
 from unittest.mock import patch
 
-from app.rag import (EMBEDDING_DIMENSIONS, RagSettings, chunk_text, embedding_dimensions,
-                     local_hash_embeddings, ollama_embeddings, vector_literal)
+from app.rag import (
+    EMBEDDING_DIMENSIONS,
+    RagSettings,
+    chunk_text,
+    embedding_dimensions,
+    local_hash_embeddings,
+    ollama_embeddings,
+    vector_literal,
+)
 
 
 class FakeResponse(io.BytesIO):
@@ -27,7 +34,10 @@ class RagTest(unittest.TestCase):
         wifi, wifi_query, bluetooth = local_hash_embeddings(
             ["wifi access point ssid channel", "wifi ssid channel", "bluetooth ble service"]
         )
-        dot = lambda left, right: sum(a * b for a, b in zip(left, right))
+
+        def dot(left, right):
+            return sum(a * b for a, b in zip(left, right))
+
         self.assertAlmostEqual(math.sqrt(dot(wifi, wifi)), 1.0)
         self.assertGreater(dot(wifi, wifi_query), dot(wifi, bluetooth))
         self.assertEqual(len(wifi), EMBEDDING_DIMENSIONS)
@@ -54,16 +64,28 @@ class RagTest(unittest.TestCase):
         with patch("app.rag.urllib.request.urlopen", return_value=FakeResponse(b'{"bad":[]}')):
             with self.assertRaisesRegex(RuntimeError, "invalid_response"):
                 ollama_embeddings(settings, ["szöveg"])
-        with patch("app.rag.urllib.request.urlopen", return_value=FakeResponse(b'{"embeddings":[[1.0,2.0]]}')):
+        with patch(
+            "app.rag.urllib.request.urlopen",
+            return_value=FakeResponse(b'{"embeddings":[[1.0,2.0]]}'),
+        ):
             with self.assertRaisesRegex(RuntimeError, "invalid_dimensions"):
                 ollama_embeddings(settings, ["szöveg"])
 
     def test_embedding_handles_offline_and_missing_model(self):
         settings = RagSettings(True, "ollama", "bge-m3", "http://ollama:11434", 3, 1200, 200, 5)
-        with patch("app.rag.urllib.request.urlopen", side_effect=urllib.error.URLError("offline")), patch("app.rag.time.sleep"):
+        with (
+            patch("app.rag.urllib.request.urlopen", side_effect=urllib.error.URLError("offline")),
+            patch("app.rag.time.sleep"),
+        ):
             with self.assertRaisesRegex(RuntimeError, "provider_unavailable"):
                 ollama_embeddings(settings, ["szöveg"])
-        missing = urllib.error.HTTPError("http://ollama/api/embed", 404, "not found", {}, io.BytesIO(b'{"error":"model not found"}'))
+        missing = urllib.error.HTTPError(
+            "http://ollama/api/embed",
+            404,
+            "not found",
+            {},
+            io.BytesIO(b'{"error":"model not found"}'),
+        )
         with patch("app.rag.urllib.request.urlopen", side_effect=missing):
             with self.assertRaisesRegex(RuntimeError, "model_not_installed"):
                 ollama_embeddings(settings, ["szöveg"])

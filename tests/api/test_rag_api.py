@@ -4,7 +4,6 @@ import urllib.request
 
 import pytest
 
-
 BASE_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
 pytestmark = pytest.mark.integration
 
@@ -26,7 +25,10 @@ def test_rag_api_contract() -> None:
             "title": "Wi-Fi mérési útmutató",
             "source": "rag-contract-wifi",
             "document_type": "test",
-            "content": "Wi-Fi SSID és BSSID mérésnél rögzíteni kell a csatornát, frekvenciát és RSSI jelszintet. Wi-Fi SSID csatorna frekvencia.",
+            "content": (
+                "Wi-Fi SSID és BSSID mérésnél rögzíteni kell a csatornát, frekvenciát és "
+                "RSSI jelszintet. Wi-Fi SSID csatorna frekvencia."
+            ),
         },
     )
     bluetooth = request(
@@ -35,7 +37,9 @@ def test_rag_api_contract() -> None:
             "title": "Bluetooth mérési útmutató",
             "source": "rag-contract-bluetooth",
             "document_type": "test",
-            "content": "Bluetooth BLE vizsgálatnál a MAC-cím, eszköznév és service UUID mezők szükségesek.",
+            "content": (
+                "Bluetooth BLE vizsgálatnál a MAC-cím, eszköznév és service UUID mezők szükségesek."
+            ),
         },
     )
     assert wifi["chunk_count"] == 1 and bluetooth["chunk_count"] == 1
@@ -45,13 +49,17 @@ def test_rag_api_contract() -> None:
     assert status["vector_index"] == "pgvector_hnsw_cosine"
     assert status["indexed_embeddings"] >= 2
 
-    retrieval = request("/api/rag/retrieve", {"query": "Wi-Fi SSID csatorna frekvencia", "top_k": 2})
+    retrieval = request(
+        "/api/rag/retrieve", {"query": "Wi-Fi SSID csatorna frekvencia", "top_k": 2}
+    )
     assert len(retrieval["items"]) == 2
     assert retrieval["items"][0]["source"] == "rag-contract-wifi"
     assert retrieval["items"][0]["similarity"] > retrieval["items"][1]["similarity"]
     assert retrieval["source_records"][0]["record_type"] == "document_chunk"
 
-    answer = request("/api/ask", {"question": "Mit ír a dokumentáció a Wi-Fi SSID csatorna méréséről?"})
+    answer = request(
+        "/api/ask", {"question": "Mit ír a dokumentáció a Wi-Fi SSID csatorna méréséről?"}
+    )
     assert answer["rag"] is True
     assert answer["mode"] == "rag_assistant"
     assert answer["retrieval"] == "structured_sql_and_vector_top_k"

@@ -5,6 +5,7 @@ This is not a hardware benchmark. It measures the current machine and writes all
 inputs/environment into the report so the numbers cannot be mistaken for an
 Aaronia/USRP performance claim.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,19 +15,20 @@ import os
 import platform
 import queue
 import statistics
+import sys
 import tempfile
 import time
 import tracemalloc
+import types
 from datetime import datetime, timezone
 from importlib.machinery import ModuleSpec
 from importlib.util import find_spec
 from pathlib import Path
-import sys
-import types
 
 import numpy as np
 
 if find_spec("prometheus_client") is None:
+
     class _Metric:
         def labels(self, *args, **kwargs):
             return self
@@ -106,7 +108,7 @@ def main() -> int:
             # Deterministic narrowband event after detector warm-up.
             if sequence >= 8 and sequence % 7 == 0:
                 center = args.points // 2
-                powers[max(0, center - 2):min(args.points, center + 3)] = -42.0
+                powers[max(0, center - 2) : min(args.points, center + 3)] = -42.0
             frame = {
                 "schema_version": 1,
                 "sensor_id": "offline-load-fixture",
@@ -128,7 +130,9 @@ def main() -> int:
                 "metadata": {"is_simulated": True, "fixture": True},
             }
             started = time.perf_counter()
-            payload = (json.dumps(frame, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+            payload = (json.dumps(frame, separators=(",", ":"), allow_nan=False) + "\n").encode(
+                "utf-8"
+            )
             serialize_seconds.append(time.perf_counter() - started)
             payload_sizes.append(len(payload))
             recording.write(payload)
@@ -190,8 +194,12 @@ def main() -> int:
             "payload_bytes_max": max(payload_sizes),
             "serialization_ms_mean": statistics.fmean(serialize_seconds) * 1000,
             "serialization_ms_p95": percentile(serialize_seconds, 0.95) * 1000,
-            "anomaly_ms_mean": statistics.fmean(detector_seconds) * 1000 if detector_seconds else None,
-            "anomaly_ms_p95": percentile(detector_seconds, 0.95) * 1000 if detector_seconds else None,
+            "anomaly_ms_mean": statistics.fmean(detector_seconds) * 1000
+            if detector_seconds
+            else None,
+            "anomaly_ms_p95": percentile(detector_seconds, 0.95) * 1000
+            if detector_seconds
+            else None,
             "detections": detection_count,
             "client_drops": client_drops,
             "peak_tracemalloc_bytes": peak_memory,

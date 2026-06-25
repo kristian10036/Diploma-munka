@@ -10,17 +10,36 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from psycopg.types.json import Jsonb
 
 from app.db import get_db
-from app.runtime import DEVICE_IMPORT_TABLES
+from app.runtime import DEVICE_IMPORT_TABLES, SINGLE_ACTIVE_MEASUREMENT_SESSION
 from app.schemas import MeasurementSourceRequest, SessionStartRequest
-from app.runtime import SINGLE_ACTIVE_MEASUREMENT_SESSION
-from app.services.persistence import (create_csv_import, ensure_bettercap_measurement_source,
-    ensure_kismet_measurement_source, ensure_location, extract_common_fields, insert_device_import_row,
-    resolve_import_session, save_uploaded_file, upsert_bluetooth_observation, upsert_kismet_observation)
-from app.utils.parsing import (normalize_bettercap_row, normalize_kismet_row, parse_bettercap_upload,
-    parse_csv_bytes, parse_datetime_value, parse_kismet_upload)
-from app.utils.uploads import DEFAULT_IMPORT_LIMIT_BYTES, read_bounded_upload, reject_binary_text_payload
+from app.services.persistence import (
+    create_csv_import,
+    ensure_bettercap_measurement_source,
+    ensure_kismet_measurement_source,
+    ensure_location,
+    extract_common_fields,
+    insert_device_import_row,
+    resolve_import_session,
+    save_uploaded_file,
+    upsert_bluetooth_observation,
+    upsert_kismet_observation,
+)
+from app.utils.parsing import (
+    normalize_bettercap_row,
+    normalize_kismet_row,
+    parse_bettercap_upload,
+    parse_csv_bytes,
+    parse_datetime_value,
+    parse_kismet_upload,
+)
+from app.utils.uploads import (
+    DEFAULT_IMPORT_LIMIT_BYTES,
+    read_bounded_upload,
+    reject_binary_text_payload,
+)
 
 router = APIRouter()
+
 
 @router.post("/api/sessions/start", status_code=201)
 def start_measurement_session(request: SessionStartRequest):
@@ -94,7 +113,9 @@ def start_measurement_session(request: SessionStartRequest):
                     location_name,
                     request.operator_name.strip() if request.operator_name else None,
                     request.notes.strip() if request.notes else None,
-                    request.environment_description.strip() if request.environment_description else None,
+                    request.environment_description.strip()
+                    if request.environment_description
+                    else None,
                 ),
             )
             session = dict(cur.fetchone())
@@ -205,7 +226,9 @@ def add_measurement_source(session_id: uuid.UUID, request: MeasurementSourceRequ
     source_name = request.source_name.strip()
     source_status = request.status.strip().lower()
     if not source_type or not source_name or not source_status:
-        raise HTTPException(status_code=400, detail="A source_type, source_name es status kotelezo.")
+        raise HTTPException(
+            status_code=400, detail="A source_type, source_name es status kotelezo."
+        )
     source_config = request.config or {}
 
     with get_db() as conn:
@@ -291,12 +314,16 @@ def import_device_csv(
         with conn.cursor() as cur:
             location_id = ensure_location(cur, location_name)
             csv_import_id = create_csv_import(cur, filename, device_type)
-            uploaded_file_id = save_uploaded_file(cur, csv_import_id, filename, file_bytes, file.content_type)
+            uploaded_file_id = save_uploaded_file(
+                cur, csv_import_id, filename, file_bytes, file.content_type
+            )
 
             for row_number, row in enumerate(rows, start=2):
                 try:
                     fields = extract_common_fields(device_type, row, fallback_time)
-                    insert_device_import_row(cur, device_type, csv_import_id, location_id, row_number, row, fields)
+                    insert_device_import_row(
+                        cur, device_type, csv_import_id, location_id, row_number, row, fields
+                    )
                     if device_type == "kismet":
                         upsert_kismet_observation(cur, location_id, fields)
                     elif device_type == "bettercap_ble":
@@ -460,12 +487,17 @@ def import_kismet_file(
                               vendor = COALESCE(EXCLUDED.vendor, wifi_devices.vendor),
                               encryption = COALESCE(EXCLUDED.encryption, wifi_devices.encryption),
                               device_type = CASE
-                                WHEN EXCLUDED.device_type IS NOT NULL AND EXCLUDED.device_type <> 'unknown'
+                                WHEN EXCLUDED.device_type IS NOT NULL
+                                     AND EXCLUDED.device_type <> 'unknown'
                                 THEN EXCLUDED.device_type
                                 ELSE wifi_devices.device_type
                               END,
-                              stable_identity = COALESCE(EXCLUDED.stable_identity, wifi_devices.stable_identity),
-                              identity_confidence = COALESCE(EXCLUDED.identity_confidence, wifi_devices.identity_confidence),
+                              stable_identity = COALESCE(
+                                EXCLUDED.stable_identity, wifi_devices.stable_identity
+                              ),
+                              identity_confidence = COALESCE(
+                                EXCLUDED.identity_confidence, wifi_devices.identity_confidence
+                              ),
                               first_seen = LEAST(
                                 COALESCE(wifi_devices.first_seen, EXCLUDED.first_seen),
                                 EXCLUDED.first_seen
@@ -680,7 +712,10 @@ def import_bettercap_ble_file(
                 mac = fields["mac"]
                 if not mac:
                     skipped_rows += 1
-                    error = {"row_number": row_number, "error": "Hianyzo vagy hibas Bluetooth MAC cim."}
+                    error = {
+                        "row_number": row_number,
+                        "error": "Hianyzo vagy hibas Bluetooth MAC cim.",
+                    }
                     errors.append(error)
                     cur.execute(
                         """
@@ -703,18 +738,40 @@ def import_bettercap_ble_file(
                                stable_identity, identity_confidence,
                                first_seen, last_seen, metadata,
                                created_at, updated_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                    now(), now())
                             ON CONFLICT (mac_address) DO UPDATE SET
-                              device_name = COALESCE(EXCLUDED.device_name, bluetooth_devices.device_name),
+                              device_name = COALESCE(
+                                EXCLUDED.device_name, bluetooth_devices.device_name
+                              ),
                               vendor = COALESCE(EXCLUDED.vendor, bluetooth_devices.vendor),
-                              address_type = COALESCE(EXCLUDED.address_type, bluetooth_devices.address_type),
-                              bluetooth_type = COALESCE(EXCLUDED.bluetooth_type, bluetooth_devices.bluetooth_type),
-                              vendor_resolution_method = COALESCE(EXCLUDED.vendor_resolution_method, bluetooth_devices.vendor_resolution_method),
-                              vendor_confidence = COALESCE(EXCLUDED.vendor_confidence, bluetooth_devices.vendor_confidence),
-                              bluetooth_company_id = COALESCE(EXCLUDED.bluetooth_company_id, bluetooth_devices.bluetooth_company_id),
-                              manufacturer_data_hash = COALESCE(EXCLUDED.manufacturer_data_hash, bluetooth_devices.manufacturer_data_hash),
-                              stable_identity = COALESCE(EXCLUDED.stable_identity, bluetooth_devices.stable_identity),
-                              identity_confidence = COALESCE(EXCLUDED.identity_confidence, bluetooth_devices.identity_confidence),
+                              address_type = COALESCE(
+                                EXCLUDED.address_type, bluetooth_devices.address_type
+                              ),
+                              bluetooth_type = COALESCE(
+                                EXCLUDED.bluetooth_type, bluetooth_devices.bluetooth_type
+                              ),
+                              vendor_resolution_method = COALESCE(
+                                EXCLUDED.vendor_resolution_method,
+                                bluetooth_devices.vendor_resolution_method
+                              ),
+                              vendor_confidence = COALESCE(
+                                EXCLUDED.vendor_confidence, bluetooth_devices.vendor_confidence
+                              ),
+                              bluetooth_company_id = COALESCE(
+                                EXCLUDED.bluetooth_company_id,
+                                bluetooth_devices.bluetooth_company_id
+                              ),
+                              manufacturer_data_hash = COALESCE(
+                                EXCLUDED.manufacturer_data_hash,
+                                bluetooth_devices.manufacturer_data_hash
+                              ),
+                              stable_identity = COALESCE(
+                                EXCLUDED.stable_identity, bluetooth_devices.stable_identity
+                              ),
+                              identity_confidence = COALESCE(
+                                EXCLUDED.identity_confidence, bluetooth_devices.identity_confidence
+                              ),
                               first_seen = LEAST(
                                 COALESCE(bluetooth_devices.first_seen, EXCLUDED.first_seen),
                                 EXCLUDED.first_seen
@@ -785,7 +842,9 @@ def import_bettercap_ble_file(
                                 fields["observation_count"],
                                 cleaned_source_name,
                                 Jsonb(row),
-                                Jsonb({"bettercap_import_id": csv_import_id, "source_file": filename}),
+                                Jsonb(
+                                    {"bettercap_import_id": csv_import_id, "source_file": filename}
+                                ),
                             ),
                         )
                     normalized_macs.add(mac)

@@ -34,8 +34,10 @@ def grouped_split(
             raise ValueError("every item requires a recording_id or session_id")
         digest = hashlib.sha256(f"{seed}:{item.group_id}".encode()).digest()
         value = int.from_bytes(digest[:8], "big") / float(2**64)
-        partition = "train" if value < train_fraction else (
-            "validation" if value < train_fraction + validation_fraction else "test"
+        partition = (
+            "train"
+            if value < train_fraction
+            else ("validation" if value < train_fraction + validation_fraction else "test")
         )
         previous = assignments.setdefault(item.group_id, partition)
         if previous != partition:

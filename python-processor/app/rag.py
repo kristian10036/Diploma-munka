@@ -5,12 +5,11 @@ import json
 import math
 import os
 import re
+import time
 import urllib.error
 import urllib.request
-import time
 from dataclasses import dataclass
 from typing import Any
-
 
 EMBEDDING_DIMENSIONS = 768
 
@@ -50,10 +49,23 @@ class RagSettings:
             top_k = max(1, min(20, int(os.getenv("RAG_TOP_K", "5"))))
         except ValueError:
             chunk_size, overlap, top_k = 1200, 200, 5
-        return cls(enabled, provider, model, os.getenv("OLLAMA_URL", "http://ollama:11434").rstrip("/"), timeout, chunk_size, overlap, top_k)
+        return cls(
+            enabled,
+            provider,
+            model,
+            os.getenv("OLLAMA_URL", "http://ollama:11434").rstrip("/"),
+            timeout,
+            chunk_size,
+            overlap,
+            top_k,
+        )
 
     def configured(self) -> bool:
-        return self.enabled and self.provider in {"local_hash", "ollama"} and bool(self.embedding_model)
+        return (
+            self.enabled
+            and self.provider in {"local_hash", "ollama"}
+            and bool(self.embedding_model)
+        )
 
 
 def chunk_text(content: str, max_characters: int = 1200, overlap: int = 200) -> list[str]:
@@ -67,7 +79,10 @@ def chunk_text(content: str, max_characters: int = 1200, overlap: int = 200) -> 
     while start < len(text):
         end = min(len(text), start + max_characters)
         if end < len(text):
-            boundary = max(text.rfind("\n", start + max_characters // 2, end), text.rfind(" ", start + max_characters // 2, end))
+            boundary = max(
+                text.rfind("\n", start + max_characters // 2, end),
+                text.rfind(" ", start + max_characters // 2, end),
+            )
             if boundary > start:
                 end = boundary
         chunk = text[start:end].strip()
@@ -79,7 +94,9 @@ def chunk_text(content: str, max_characters: int = 1200, overlap: int = 200) -> 
     return chunks
 
 
-def local_hash_embeddings(texts: list[str], dimensions: int = EMBEDDING_DIMENSIONS) -> list[list[float]]:
+def local_hash_embeddings(
+    texts: list[str], dimensions: int = EMBEDDING_DIMENSIONS
+) -> list[list[float]]:
     if dimensions < 64 or not texts:
         raise ValueError("invalid embedding request")
     vectors: list[list[float]] = []
@@ -141,7 +158,10 @@ def ollama_embeddings(settings: RagSettings, texts: list[str]) -> list[list[floa
         result = [[float(item) for item in vector] for vector in embeddings]
     except (TypeError, ValueError) as exc:
         raise RuntimeError("embedding_provider_invalid_response") from exc
-    if any(len(vector) != expected_dimensions or not all(math.isfinite(item) for item in vector) for vector in result):
+    if any(
+        len(vector) != expected_dimensions or not all(math.isfinite(item) for item in vector)
+        for vector in result
+    ):
         raise RuntimeError("embedding_provider_invalid_dimensions")
     return result
 
@@ -195,7 +215,8 @@ def index_document(
             cursor.execute(
                 """
                 INSERT INTO embeddings
-                  (chunk_id, embedding_provider, embedding_model, dimensions, embedding_vector, content_sha256, updated_at)
+                  (chunk_id, embedding_provider, embedding_model, dimensions, embedding_vector,
+                   content_sha256, updated_at)
                 VALUES (%s, %s, %s, %s, %s::vector, %s, now())
                 ON CONFLICT (chunk_id, embedding_provider, embedding_model) DO UPDATE SET
                   embedding_provider = EXCLUDED.embedding_provider,
@@ -204,13 +225,27 @@ def index_document(
                   content_sha256 = EXCLUDED.content_sha256,
                   updated_at = now()
                 """,
-                (chunk_id, settings.provider, settings.embedding_model, dimensions, vector_literal(embedding, dimensions), hashlib.sha256(chunk.encode()).hexdigest()),
+                (
+                    chunk_id,
+                    settings.provider,
+                    settings.embedding_model,
+                    dimensions,
+                    vector_literal(embedding, dimensions),
+                    hashlib.sha256(chunk.encode()).hexdigest(),
+                ),
             )
     connection.commit()
-    return {"document_id": document_id, "chunk_ids": chunk_ids, "chunk_count": len(chunk_ids), "embedding_model": settings.embedding_model}
+    return {
+        "document_id": document_id,
+        "chunk_ids": chunk_ids,
+        "chunk_count": len(chunk_ids),
+        "embedding_model": settings.embedding_model,
+    }
 
 
-def retrieve_chunks(connection: Any, settings: RagSettings, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
+def retrieve_chunks(
+    connection: Any, settings: RagSettings, query: str, top_k: int | None = None
+) -> list[dict[str, Any]]:
     limit = max(1, min(20, top_k or settings.default_top_k))
     dimensions = embedding_dimensions(settings.provider, settings.embedding_model)
     query_vector = vector_literal(embed_texts(settings, [query])[0], dimensions)
@@ -218,7 +253,8 @@ def retrieve_chunks(connection: Any, settings: RagSettings, query: str, top_k: i
             SELECT chunk.id::text AS chunk_id, document.id::text AS document_id,
                    document.title, document.source, chunk.chunk_index, chunk.content,
                    chunk.metadata,
-                   1 - (embedding.embedding_vector::vector({dimensions}) <=> %s::vector({dimensions})) AS similarity
+                   1 - (embedding.embedding_vector::vector({dimensions})
+                        <=> %s::vector({dimensions})) AS similarity
             FROM embeddings embedding
             JOIN document_chunks chunk ON chunk.id = embedding.chunk_id
             JOIN documents document ON document.id = chunk.document_id
@@ -230,7 +266,14 @@ def retrieve_chunks(connection: Any, settings: RagSettings, query: str, top_k: i
     with connection.cursor() as cursor:
         cursor.execute(
             query_sql,
-            (query_vector, settings.provider, settings.embedding_model, dimensions, query_vector, limit),
+            (
+                query_vector,
+                settings.provider,
+                settings.embedding_model,
+                dimensions,
+                query_vector,
+                limit,
+            ),
         )
         return [
             {
@@ -243,17 +286,25 @@ def retrieve_chunks(connection: Any, settings: RagSettings, query: str, top_k: i
 
 def database_rag_status(connection: Any, settings: RagSettings) -> dict[str, Any]:
     with connection.cursor() as cursor:
-        cursor.execute("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') AS vector_enabled")
+        cursor.execute(
+            "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') AS vector_enabled"
+        )
         vector_enabled = bool(cursor.fetchone()["vector_enabled"])
         dimensions = embedding_dimensions(settings.provider, settings.embedding_model)
-        cursor.execute("SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = %s) AS index_enabled", (f"idx_embeddings_vector_hnsw_{dimensions}",))
+        cursor.execute(
+            "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = %s) AS index_enabled",
+            (f"idx_embeddings_vector_hnsw_{dimensions}",),
+        )
         index_enabled = bool(cursor.fetchone()["index_enabled"])
-        cursor.execute("SELECT COUNT(*) AS count FROM embeddings WHERE embedding_vector IS NOT NULL")
+        cursor.execute(
+            "SELECT COUNT(*) AS count FROM embeddings WHERE embedding_vector IS NOT NULL"
+        )
         embedding_count = int(cursor.fetchone()["count"])
         cursor.execute("SELECT COUNT(*) AS count FROM document_chunks")
         chunk_count = int(cursor.fetchone()["count"])
         cursor.execute(
-            "SELECT COUNT(*) AS count FROM embeddings WHERE embedding_provider = %s AND embedding_model = %s AND dimensions = %s AND embedding_vector IS NOT NULL",
+            "SELECT COUNT(*) AS count FROM embeddings WHERE embedding_provider = %s "
+            "AND embedding_model = %s AND dimensions = %s AND embedding_vector IS NOT NULL",
             (settings.provider, settings.embedding_model, dimensions),
         )
         compatible_count = int(cursor.fetchone()["count"])

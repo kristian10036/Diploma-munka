@@ -7,8 +7,13 @@ REFERENCE_STATUSES = ("not_compared", "in_reference", "new")
 
 WIFI_DIFF_FIELDS = ("ssid", "encryption", "device_type", "channel", "frequency", "vendor")
 BLUETOOTH_DIFF_FIELDS = (
-    "device_name", "vendor", "address_type", "bluetooth_type",
-    "company_id", "service_uuid_fingerprint", "manufacturer_data_hash",
+    "device_name",
+    "vendor",
+    "address_type",
+    "bluetooth_type",
+    "company_id",
+    "service_uuid_fingerprint",
+    "manufacturer_data_hash",
 )
 
 NO_CONFIDENT_MATCH_DETAIL = "Nem találtunk megfelelően biztos referencia-egyezést."
@@ -30,7 +35,9 @@ def _service_uuid_fingerprint(service_uuids: Any) -> str | None:
     return ",".join(values) if values else None
 
 
-def match_wifi_identity(current: dict[str, Any], baseline_rows: list[dict[str, Any]], matched_ids: set[str]) -> MatchResult:
+def match_wifi_identity(
+    current: dict[str, Any], baseline_rows: list[dict[str, Any]], matched_ids: set[str]
+) -> MatchResult:
     identity = current.get("stable_identity") or current.get("bssid")
     if not identity:
         return None
@@ -42,7 +49,9 @@ def match_wifi_identity(current: dict[str, Any], baseline_rows: list[dict[str, A
     return None
 
 
-def _bluetooth_match_candidate(current: dict[str, Any], baseline: dict[str, Any]) -> tuple[str, str] | None:
+def _bluetooth_match_candidate(
+    current: dict[str, Any], baseline: dict[str, Any]
+) -> tuple[str, str] | None:
     identity = current.get("stable_identity") or current.get("mac")
     if identity and baseline.get("stable_identity") == identity:
         return "stable_identity", "certain"
@@ -77,7 +86,9 @@ def _bluetooth_match_candidate(current: dict[str, Any], baseline: dict[str, Any]
     return None
 
 
-def match_bluetooth_identity(current: dict[str, Any], baseline_rows: list[dict[str, Any]], matched_ids: set[str]) -> MatchResult:
+def match_bluetooth_identity(
+    current: dict[str, Any], baseline_rows: list[dict[str, Any]], matched_ids: set[str]
+) -> MatchResult:
     best: MatchResult = None
     for baseline in baseline_rows:
         if baseline["stable_identity"] in matched_ids:
@@ -99,7 +110,11 @@ def _wifi_value(source: dict[str, Any], field: str) -> Any:
     if field == "channel":
         return source.get("channel") if "channel" in source else source.get("typical_channel")
     if field == "frequency":
-        return source.get("frequency_hz") if "frequency_hz" in source else source.get("typical_frequency_hz")
+        return (
+            source.get("frequency_hz")
+            if "frequency_hz" in source
+            else source.get("typical_frequency_hz")
+        )
     return source.get(field)
 
 
@@ -109,7 +124,9 @@ def wifi_differences(baseline: dict[str, Any], current: dict[str, Any]) -> list[
         reference_value = _wifi_value(baseline, field)
         current_value = _wifi_value(current, field)
         if _normalize(reference_value) != _normalize(current_value):
-            differences.append({"field": field, "reference_value": reference_value, "current_value": current_value})
+            differences.append(
+                {"field": field, "reference_value": reference_value, "current_value": current_value}
+            )
     return differences
 
 
@@ -123,17 +140,23 @@ def _bluetooth_value(source: dict[str, Any], field: str) -> Any:
     return source.get(field)
 
 
-def bluetooth_differences(baseline: dict[str, Any], current: dict[str, Any]) -> list[dict[str, Any]]:
+def bluetooth_differences(
+    baseline: dict[str, Any], current: dict[str, Any]
+) -> list[dict[str, Any]]:
     differences = []
     for field in BLUETOOTH_DIFF_FIELDS:
         reference_value = _bluetooth_value(baseline, field)
         current_value = _bluetooth_value(current, field)
         if _normalize(reference_value) != _normalize(current_value):
-            differences.append({"field": field, "reference_value": reference_value, "current_value": current_value})
+            differences.append(
+                {"field": field, "reference_value": reference_value, "current_value": current_value}
+            )
     return differences
 
 
-def annotate_devices(cur, *, items: list[dict[str, Any]], reference_set_id: Any, protocol: str) -> dict[str, Any]:
+def annotate_devices(
+    cur, *, items: list[dict[str, Any]], reference_set_id: Any, protocol: str
+) -> dict[str, Any]:
     """Annotate already-fetched session device rows with not_compared/in_reference/new
     status against an explicitly loaded reference_set, instead of the legacy
     location_name-triggered baseline lookup. Mutates each item in place and
@@ -178,7 +201,8 @@ def annotate_devices(cur, *, items: list[dict[str, Any]], reference_set_id: Any,
     missing_reference = [
         dict(baseline)
         for baseline in baseline_rows
-        if baseline["stable_identity"] not in matched_ids and baseline.get("expected_state") != "ignored"
+        if baseline["stable_identity"] not in matched_ids
+        and baseline.get("expected_state") != "ignored"
     ]
     reference_summary = {
         "in_reference": in_reference_count,
@@ -203,6 +227,11 @@ def stamp_not_compared(items: list[dict[str, Any]]) -> dict[str, Any]:
         item["reference_values"] = None
         item["current_values"] = None
     return {
-        "reference_summary": {"in_reference": 0, "new": 0, "missing_reference": 0, "total_active": len(items)},
+        "reference_summary": {
+            "in_reference": 0,
+            "new": 0,
+            "missing_reference": 0,
+            "total_active": len(items),
+        },
         "reference_missing": [],
     }

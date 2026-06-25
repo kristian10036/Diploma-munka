@@ -1,13 +1,12 @@
 import io
 import unittest
 
-from fastapi import HTTPException, UploadFile
-
 from app.utils.uploads import (
     detect_reference_image,
     read_bounded_upload,
     reject_binary_text_payload,
 )
+from fastapi import HTTPException, UploadFile
 
 
 class UploadBoundaryTests(unittest.TestCase):

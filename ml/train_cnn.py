@@ -77,8 +77,14 @@ def main() -> None:
 
     manifest = load_manifest(args.manifest_jsonl)
     split = json.loads(args.split_json.read_text(encoding="utf-8"))["partitions"]
-    train_ids, validation_ids, test_ids = map(list, (split["train"], split["validation"], split["test"]))
-    if (set(train_ids) & set(validation_ids)) or (set(train_ids) & set(test_ids)) or (set(validation_ids) & set(test_ids)):
+    train_ids, validation_ids, test_ids = map(
+        list, (split["train"], split["validation"], split["test"])
+    )
+    if (
+        (set(train_ids) & set(validation_ids))
+        or (set(train_ids) & set(test_ids))
+        or (set(validation_ids) & set(test_ids))
+    ):
         raise ValueError("dataset item leakage detected")
     classes = sorted({str(manifest[item_id]["label"]) for item_id in train_ids})
     if len(classes) < 2:
@@ -92,7 +98,12 @@ def main() -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
     generator = torch.Generator().manual_seed(args.seed)
-    loader = DataLoader(TensorDataset(train_x, train_y), batch_size=args.batch_size, shuffle=True, generator=generator)
+    loader = DataLoader(
+        TensorDataset(train_x, train_y),
+        batch_size=args.batch_size,
+        shuffle=True,
+        generator=generator,
+    )
     history = []
     for epoch in range(args.epochs):
         model.train()
@@ -106,7 +117,13 @@ def main() -> None:
         model.eval()
         with torch.inference_mode():
             validation_loss = float(criterion(model(validation_x), validation_y))
-        history.append({"epoch": epoch + 1, "train_loss": float(np.mean(losses)), "validation_loss": validation_loss})
+        history.append(
+            {
+                "epoch": epoch + 1,
+                "train_loss": float(np.mean(losses)),
+                "validation_loss": validation_loss,
+            }
+        )
 
     model.eval()
     started = time.perf_counter()
@@ -135,7 +152,9 @@ def main() -> None:
             "history": history,
         }
     )
-    (args.output_directory / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+    (args.output_directory / "metrics.json").write_text(
+        json.dumps(metrics, indent=2) + "\n", encoding="utf-8"
+    )
     print(json.dumps(metrics))
 
 

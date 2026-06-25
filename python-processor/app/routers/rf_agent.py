@@ -8,14 +8,27 @@ from fastapi import APIRouter, HTTPException
 from psycopg.types.json import Jsonb
 
 from app.db import _write_audit_event, get_db
-from app.metrics import (SDRANGEL_IQ_PACKET_LOSS, SDRANGEL_IQ_PACKETS_DROPPED, SDRANGEL_IQ_QUEUE_DEPTH, SDRANGEL_IQ_RECONNECTS)
+from app.metrics import (
+    SDRANGEL_IQ_PACKET_LOSS,
+    SDRANGEL_IQ_PACKETS_DROPPED,
+    SDRANGEL_IQ_QUEUE_DEPTH,
+    SDRANGEL_IQ_RECONNECTS,
+)
 from app.rf_agent_client import RfAgentUnavailable, request_rf_agent, rf_agent_status
 from app.runtime import RF_AGENT_SETTINGS, SDRANGEL_IQ_DATA_PLANE
-from app.schemas import (RecordingStartRequest, ReplaySeekRequest, ReplayStartRequest,
-    SdrangelDemodRequest, SdrangelDemodUpdateRequest, SdrangelDeviceSetRequest, SdrangelTuneRequest,
-    ViewportRequest)
+from app.schemas import (
+    RecordingStartRequest,
+    ReplaySeekRequest,
+    ReplayStartRequest,
+    SdrangelDemodRequest,
+    SdrangelDemodUpdateRequest,
+    SdrangelDeviceSetRequest,
+    SdrangelTuneRequest,
+    ViewportRequest,
+)
 
 router = APIRouter()
+
 
 def _rf_proxy(path: str, method: str = "GET", body: dict[str, Any] | None = None):
     try:
@@ -33,9 +46,19 @@ def _persist_recording_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     result = dict(metadata)
     result["metadata_persisted"] = False
     required = (
-        "recording_id", "session_id", "sensor_id", "source_type", "source_device",
-        "started_at", "frame_count", "start_frequency_hz", "stop_frequency_hz",
-        "num_points", "frame_file", "compression", "checksum_algorithm",
+        "recording_id",
+        "session_id",
+        "sensor_id",
+        "source_type",
+        "source_device",
+        "started_at",
+        "frame_count",
+        "start_frequency_hz",
+        "stop_frequency_hz",
+        "num_points",
+        "frame_file",
+        "compression",
+        "checksum_algorithm",
         "checksum_sha256",
     )
     missing = [name for name in required if result.get(name) in (None, "")]
@@ -94,16 +117,27 @@ def _persist_recording_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
                       updated_at = now()
                     """,
                     (
-                        str(result["recording_id"]), session_id, measurement_session_id,
-                        str(result["sensor_id"]), str(result["source_type"]),
-                        str(result["source_device"]), str(result.get("status") or "completed"),
-                        result["started_at"], result.get("ended_at"),
-                        result.get("first_frame_timestamp"), result.get("last_frame_timestamp"),
-                        int(result["frame_count"]), int(result["start_frequency_hz"]),
-                        int(result["stop_frequency_hz"]), int(result["num_points"]),
-                        str(result["frame_file"]), str(result["compression"]),
-                        str(result["checksum_algorithm"]), str(result["checksum_sha256"]),
-                        result.get("description"), Jsonb(metadata),
+                        str(result["recording_id"]),
+                        session_id,
+                        measurement_session_id,
+                        str(result["sensor_id"]),
+                        str(result["source_type"]),
+                        str(result["source_device"]),
+                        str(result.get("status") or "completed"),
+                        result["started_at"],
+                        result.get("ended_at"),
+                        result.get("first_frame_timestamp"),
+                        result.get("last_frame_timestamp"),
+                        int(result["frame_count"]),
+                        int(result["start_frequency_hz"]),
+                        int(result["stop_frequency_hz"]),
+                        int(result["num_points"]),
+                        str(result["frame_file"]),
+                        str(result["compression"]),
+                        str(result["checksum_algorithm"]),
+                        str(result["checksum_sha256"]),
+                        result.get("description"),
+                        Jsonb(metadata),
                     ),
                 )
             conn.commit()
@@ -303,7 +337,11 @@ def get_sdrangel_readiness():
     try:
         control = _rf_proxy("/sdrangel/status")
     except HTTPException as exc:
-        control = {"status": "unreachable", "control_plane": "unreachable", "error": str(exc.detail)}
+        control = {
+            "status": "unreachable",
+            "control_plane": "unreachable",
+            "error": str(exc.detail),
+        }
     try:
         devicesets = _rf_proxy("/sdrangel/devicesets")
     except HTTPException as exc:
@@ -334,16 +372,36 @@ def get_sdrangel_readiness():
         "source": source,
         "native_iq_audio": native_iq_ready,
         "audio_output": {
-            "status": "native_iq" if native_iq_ready else ("controlled_by_sdrangel" if deviceset_ready else "not_configured"),
+            "status": "native_iq"
+            if native_iq_ready
+            else ("controlled_by_sdrangel" if deviceset_ready else "not_configured"),
             "hardware_tested": False,
         },
-        "accepted_demodulators": (["AM", "NFM", "WFM"] if native_iq_ready else [
-            "AM", "NFM", "WFM", "BFM", "USB", "LSB", "DSB", "CW",
-            "DSD", "FREEDV", "M17", "DAB"
-        ]),
+        "accepted_demodulators": (
+            ["AM", "NFM", "WFM"]
+            if native_iq_ready
+            else [
+                "AM",
+                "NFM",
+                "WFM",
+                "BFM",
+                "USB",
+                "LSB",
+                "DSB",
+                "CW",
+                "DSD",
+                "FREEDV",
+                "M17",
+                "DAB",
+            ]
+        ),
         "verified_optional_settings": [
-            "inputFrequencyOffset", "rfBandwidth/bandwidth", "squelch",
-            "audioMute", "volume", "audioDeviceName"
+            "inputFrequencyOffset",
+            "rfBandwidth/bandwidth",
+            "squelch",
+            "audioMute",
+            "volume",
+            "audioDeviceName",
         ],
     }
 
@@ -365,7 +423,8 @@ def start_sdrangel_demod(request: SdrangelDemodRequest):
     result = _rf_proxy("/sdrangel/demod/start", "POST", payload)
     result["requested"] = request.model_dump(exclude_none=True)
     result["accepted_optional_settings"] = [
-        key for key in ("bandwidth_hz", "squelch_db", "audio_sample_rate", "audio_device", "volume")
+        key
+        for key in ("bandwidth_hz", "squelch_db", "audio_sample_rate", "audio_device", "volume")
         if key in payload
     ]
     return result

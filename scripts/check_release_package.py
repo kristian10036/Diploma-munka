@@ -5,7 +5,6 @@ import argparse
 import sys
 from pathlib import Path
 
-
 FORBIDDEN_DIR_NAMES = {
     "__pycache__",
     ".pytest_cache",
@@ -48,7 +47,10 @@ def find_release_package_issues(root: Path) -> list[str]:
             continue
 
         stem_words = {
-            word for token in lowered_name.replace(".", "-").replace("_", "-").split("-") for word in [token] if word
+            word
+            for token in lowered_name.replace(".", "-").replace("_", "-").split("-")
+            for word in [token]
+            if word
         }
         if stem_words & SUSPICIOUS_NAME_PARTS:
             issues.append(f"suspicious_name:{relative_path.as_posix()}")
@@ -58,7 +60,9 @@ def find_release_package_issues(root: Path) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Validate that a staged release package does not contain local or secret material."
+        description=(
+            "Validate that a staged release package does not contain local or secret material."
+        )
     )
     parser.add_argument(
         "package_root",

@@ -14,8 +14,8 @@ from app.config import BettercapSettings, DeviceBaselineSettings, KismetSettings
 from app.ml import RuleBasedRfClassifier
 from app.rag import RagSettings
 from app.rf_agent_client import RfAgentSettings
-from app.services.collectors import BettercapCollector, KismetCollectorStub
 from app.services.anomaly import OnlineAnomalyPipeline
+from app.services.collectors import BettercapCollector, KismetCollectorStub
 from app.services.recordings import RecordingCatalog, RecordingSettings, RecordingStorage
 from app.services.sdrangel import IqDataPlane, IqDataPlaneConfig, MockIqSink
 from app.spectrum import SpectrumSourceManager
@@ -33,7 +33,9 @@ RECORDING_STORAGE = RecordingStorage(RECORDING_SETTINGS)
 RECORDING_CATALOG = RecordingCatalog(RECORDING_SETTINGS)
 SDRANGEL_IQ_CONFIG = IqDataPlaneConfig.from_env()
 SDRANGEL_IQ_DATA_PLANE = IqDataPlane(SDRANGEL_IQ_CONFIG, MockIqSink())
-ANOMALY_PIPELINE = OnlineAnomalyPipeline(queue_size=max(1, int(os.getenv("ANOMALY_QUEUE_SIZE", "32"))))
+ANOMALY_PIPELINE = OnlineAnomalyPipeline(
+    queue_size=max(1, int(os.getenv("ANOMALY_QUEUE_SIZE", "32")))
+)
 
 SPECTRUM_SETTINGS = SpectrumSettings.from_env()
 SPECTRUM_SOURCE_MANAGER = SpectrumSourceManager(SPECTRUM_SETTINGS)
@@ -46,7 +48,9 @@ KISMET_COLLECTOR = KismetCollectorStub(KISMET_SETTINGS)
 BETTERCAP_SETTINGS = BettercapSettings.from_env()
 BETTERCAP_COLLECTOR = BettercapCollector(BETTERCAP_SETTINGS)
 DEVICE_BASELINE_SETTINGS = DeviceBaselineSettings.from_env()
-SINGLE_ACTIVE_MEASUREMENT_SESSION = os.getenv("SINGLE_ACTIVE_MEASUREMENT_SESSION", "true").strip().lower() not in {"0", "false", "no", "off"}
+SINGLE_ACTIVE_MEASUREMENT_SESSION = os.getenv(
+    "SINGLE_ACTIVE_MEASUREMENT_SESSION", "true"
+).strip().lower() not in {"0", "false", "no", "off"}
 
 
 def bluetooth_adapter_conflict_warning(
@@ -67,7 +71,9 @@ def bluetooth_adapter_conflict_warning(
     )
 
 
-BLUETOOTH_ADAPTER_CONFLICT_WARNING = bluetooth_adapter_conflict_warning(KISMET_SETTINGS, BETTERCAP_SETTINGS)
+BLUETOOTH_ADAPTER_CONFLICT_WARNING = bluetooth_adapter_conflict_warning(
+    KISMET_SETTINGS, BETTERCAP_SETTINGS
+)
 if BLUETOOTH_ADAPTER_CONFLICT_WARNING:
     logger.warning(
         "bluetooth_adapter_conflict",
@@ -117,6 +123,7 @@ connected_websockets: list[Any] = []
 mqtt_client = mqtt.Client()
 _mqtt_connected = False
 
+
 def connect_mqtt() -> None:
     global _mqtt_connected
     if _mqtt_connected:
@@ -126,7 +133,17 @@ def connect_mqtt() -> None:
         _mqtt_connected = True
     except Exception as exc:
         # MQTT is optional for core startup. The health/status endpoints expose failures.
-        logger.warning("mqtt_connection_unavailable", extra={"structured": {"broker": MQTT_BROKER, "port": MQTT_PORT, "error_type": type(exc).__name__}})
+        logger.warning(
+            "mqtt_connection_unavailable",
+            extra={
+                "structured": {
+                    "broker": MQTT_BROKER,
+                    "port": MQTT_PORT,
+                    "error_type": type(exc).__name__,
+                }
+            },
+        )
+
 
 def disconnect_mqtt() -> None:
     global _mqtt_connected
@@ -136,6 +153,7 @@ def disconnect_mqtt() -> None:
         mqtt_client.disconnect()
     finally:
         _mqtt_connected = False
+
 
 def mqtt_status() -> dict[str, Any]:
     return {

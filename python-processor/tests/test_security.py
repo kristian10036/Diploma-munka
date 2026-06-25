@@ -3,8 +3,6 @@ import os
 import unittest
 from unittest.mock import patch
 
-from fastapi import Request
-
 from app.security import SecuritySettings
 
 
@@ -31,7 +29,9 @@ class SecuritySettingsTests(unittest.TestCase):
             admin_token_sha256="",
             max_request_bytes=1024,
         )
-        with patch.dict(os.environ, {"DATABASE_URL": "", "POSTGRES_PASSWORD": "safe-random-value"}, clear=False):
+        with patch.dict(
+            os.environ, {"DATABASE_URL": "", "POSTGRES_PASSWORD": "safe-random-value"}, clear=False
+        ):
             with self.assertRaisesRegex(RuntimeError, "DATABASE_URL is required"):
                 settings.validate()
 
@@ -78,7 +78,11 @@ class SecuritySettingsTests(unittest.TestCase):
             settings.validate()
 
     def test_app_profile_env_controls_mode_and_fallback(self):
-        with patch.dict(os.environ, {"APP_PROFILE": "production", "ALLOW_SYNTHETIC_FALLBACK": "false"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"APP_PROFILE": "production", "ALLOW_SYNTHETIC_FALLBACK": "false"},
+            clear=False,
+        ):
             settings = SecuritySettings.from_env()
         self.assertEqual(settings.app_mode, "production")
         self.assertFalse(settings.allow_synthetic_fallback)

@@ -4,7 +4,6 @@ import urllib.request
 
 import pytest
 
-
 BASE_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
 pytestmark = pytest.mark.integration
 
@@ -33,7 +32,14 @@ def test_assistant_api_contract() -> None:
     assert result["retrieval"] == "structured_sql"
     assert result["rag"] is False
     assert result["status"] == "ai_component_not_available"
-    assert set(result["context"]) >= {"sessions", "wifi", "bluetooth", "peaks", "anomalies", "ml_status"}
+    assert set(result["context"]) >= {
+        "sessions",
+        "wifi",
+        "bluetooth",
+        "peaks",
+        "anomalies",
+        "ml_status",
+    }
     assert isinstance(result["source_records"], list)
     for records in result["context"].values():
         assert len(records) <= 10

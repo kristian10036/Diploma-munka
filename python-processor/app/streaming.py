@@ -1,22 +1,41 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
-from app.metrics import (ANOMALY_QUEUE_DEPTH, ANOMALY_QUEUE_DROPS, BACKEND_WS_CLIENTS,
-    SPECTRUM_FRAME_POINTS, SPECTRUM_FRAMES_TOTAL, SPECTRUM_SOURCE_ERRORS_TOTAL)
-from app.runtime import (ANOMALY_PIPELINE, BETTERCAP_IMPORT_STATE, BETTERCAP_SETTINGS,
-    KISMET_COLLECTOR, KISMET_IMPORT_STATE, KISMET_SETTINGS,
-    SPECTRUM_SETTINGS, SPECTRUM_SOURCE_MANAGER, connected_websockets, connect_mqtt,
-    disconnect_mqtt, mqtt_client)
-from app.spectrum import SpectrumSourceUnavailable
-from app.routers.health_collectors import (import_kismet_alert_rows, run_bettercap_live_import,
-    run_kismet_live_import)
+from app.metrics import (
+    ANOMALY_QUEUE_DEPTH,
+    ANOMALY_QUEUE_DROPS,
+    BACKEND_WS_CLIENTS,
+    SPECTRUM_FRAME_POINTS,
+    SPECTRUM_FRAMES_TOTAL,
+    SPECTRUM_SOURCE_ERRORS_TOTAL,
+)
+from app.routers.health_collectors import (
+    import_kismet_alert_rows,
+    run_bettercap_live_import,
+    run_kismet_live_import,
+)
+from app.runtime import (
+    ANOMALY_PIPELINE,
+    BETTERCAP_IMPORT_STATE,
+    BETTERCAP_SETTINGS,
+    KISMET_COLLECTOR,
+    KISMET_IMPORT_STATE,
+    KISMET_SETTINGS,
+    SPECTRUM_SETTINGS,
+    SPECTRUM_SOURCE_MANAGER,
+    connect_mqtt,
+    connected_websockets,
+    disconnect_mqtt,
+    mqtt_client,
+)
 from app.services.anomaly import SpectrumEnvelope
 from app.services.anomaly.repository import persist_detection_batch
+from app.spectrum import SpectrumSourceUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +45,18 @@ KISMET_ALERT_IMPORT_TASK: asyncio.Task | None = None
 BETTERCAP_IMPORT_TASK: asyncio.Task | None = None
 SPECTRUM_BROADCAST_TASK: asyncio.Task | None = None
 
+
 async def generate_and_broadcast_spectrum():
     initial_status = SPECTRUM_SOURCE_MANAGER.get_status()
-    logger.info("background_started", extra={"structured": {"spectrum_source": initial_status.get("mode"), "status": initial_status.get("status")}})
+    logger.info(
+        "background_started",
+        extra={
+            "structured": {
+                "spectrum_source": initial_status.get("mode"),
+                "status": initial_status.get("status"),
+            }
+        },
+    )
     last_source_error: str | None = None
     last_demo_alert_bucket: int | None = None
     anomaly_sequence = 0
@@ -42,7 +70,9 @@ async def generate_and_broadcast_spectrum():
         except SpectrumSourceUnavailable as exc:
             message = str(exc)
             if message != last_source_error:
-                logger.warning("spectrum_source_no_frame", extra={"structured": {"message": message}})
+                logger.warning(
+                    "spectrum_source_no_frame", extra={"structured": {"message": message}}
+                )
                 last_source_error = message
             SPECTRUM_SOURCE_ERRORS_TOTAL.labels(error_type="source_unavailable").inc()
             await asyncio.sleep(1.0)
@@ -50,7 +80,9 @@ async def generate_and_broadcast_spectrum():
         except Exception as exc:
             message = f"Nem vart spektrum forras hiba: {exc}"
             if message != last_source_error:
-                logger.warning("spectrum_source_degraded", extra={"structured": {"message": message}})
+                logger.warning(
+                    "spectrum_source_degraded", extra={"structured": {"message": message}}
+                )
                 last_source_error = message
             SPECTRUM_SOURCE_ERRORS_TOTAL.labels(error_type="unexpected").inc()
             await asyncio.sleep(1.0)
@@ -60,7 +92,9 @@ async def generate_and_broadcast_spectrum():
 
         anomaly_sequence += 1
         envelope = SpectrumEnvelope(
-            frequencies_hz=tuple(int(round(point.frequency_mhz * 1_000_000)) for point in frame.points),
+            frequencies_hz=tuple(
+                int(round(point.frequency_mhz * 1_000_000)) for point in frame.points
+            ),
             powers_dbm=tuple(float(point.power_dbm) for point in frame.points),
             sequence=frame.sequence if frame.sequence is not None else anomaly_sequence,
             timestamp=frame.timestamp.isoformat(),
@@ -97,7 +131,10 @@ async def generate_and_broadcast_spectrum():
                         ),
                     )
                 except Exception as exc:
-                    logger.warning("mqtt_publish_failed", extra={"structured": {"error_type": type(exc).__name__}})
+                    logger.warning(
+                        "mqtt_publish_failed",
+                        extra={"structured": {"error_type": type(exc).__name__}},
+                    )
                 last_demo_alert_bucket = alert_bucket
 
         if connected_websockets:
@@ -128,7 +165,9 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     connected_websockets.append(websocket)
     BACKEND_WS_CLIENTS.set(len(connected_websockets))
-    logger.info("websocket_connected", extra={"structured": {"active_clients": len(connected_websockets)}})
+    logger.info(
+        "websocket_connected", extra={"structured": {"active_clients": len(connected_websockets)}}
+    )
     try:
         while True:
             await websocket.receive_text()
@@ -136,7 +175,10 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in connected_websockets:
             connected_websockets.remove(websocket)
         BACKEND_WS_CLIENTS.set(len(connected_websockets))
-        logger.info("websocket_disconnected", extra={"structured": {"active_clients": len(connected_websockets)}})
+        logger.info(
+            "websocket_disconnected",
+            extra={"structured": {"active_clients": len(connected_websockets)}},
+        )
 
 
 async def collect_kismet_alerts_in_background():
@@ -152,7 +194,9 @@ async def collect_kismet_alerts_in_background():
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.warning("kismet_background_alert_import_failed", extra={"structured": {"detail": str(exc)}})
+            logger.warning(
+                "kismet_background_alert_import_failed", extra={"structured": {"detail": str(exc)}}
+            )
         await asyncio.sleep(KISMET_SETTINGS.poll_interval_seconds)
 
 
@@ -170,7 +214,9 @@ async def collect_kismet_in_background():
             except Exception as exc:
                 detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
                 KISMET_IMPORT_STATE["last_error"] = str(detail)
-                logger.warning("kismet_background_import_failed", extra={"structured": {"detail": detail}})
+                logger.warning(
+                    "kismet_background_import_failed", extra={"structured": {"detail": detail}}
+                )
             await asyncio.sleep(KISMET_SETTINGS.poll_interval_seconds)
     finally:
         KISMET_IMPORT_STATE["running"] = False
@@ -194,7 +240,9 @@ async def collect_bettercap_in_background():
             except Exception as exc:
                 detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
                 BETTERCAP_IMPORT_STATE["last_error"] = str(detail)
-                logger.warning("bettercap_background_import_failed", extra={"structured": {"detail": detail}})
+                logger.warning(
+                    "bettercap_background_import_failed", extra={"structured": {"detail": detail}}
+                )
             await asyncio.sleep(BETTERCAP_SETTINGS.poll_interval_seconds)
     finally:
         BETTERCAP_IMPORT_STATE["running"] = False
@@ -205,7 +253,11 @@ async def startup_event():
     connect_mqtt()
     ANOMALY_PIPELINE.set_persist_callback(persist_detection_batch)
     await ANOMALY_PIPELINE.start()
-    global SPECTRUM_BROADCAST_TASK, KISMET_IMPORT_TASK, KISMET_ALERT_IMPORT_TASK, BETTERCAP_IMPORT_TASK
+    global \
+        SPECTRUM_BROADCAST_TASK, \
+        KISMET_IMPORT_TASK, \
+        KISMET_ALERT_IMPORT_TASK, \
+        BETTERCAP_IMPORT_TASK
     SPECTRUM_BROADCAST_TASK = asyncio.create_task(generate_and_broadcast_spectrum())
     if KISMET_SETTINGS.enabled:
         KISMET_IMPORT_TASK = asyncio.create_task(collect_kismet_in_background())
@@ -215,7 +267,11 @@ async def startup_event():
 
 
 async def shutdown_event():
-    global SPECTRUM_BROADCAST_TASK, KISMET_IMPORT_TASK, KISMET_ALERT_IMPORT_TASK, BETTERCAP_IMPORT_TASK
+    global \
+        SPECTRUM_BROADCAST_TASK, \
+        KISMET_IMPORT_TASK, \
+        KISMET_ALERT_IMPORT_TASK, \
+        BETTERCAP_IMPORT_TASK
     await ANOMALY_PIPELINE.stop()
     if SPECTRUM_BROADCAST_TASK is not None:
         SPECTRUM_BROADCAST_TASK.cancel()

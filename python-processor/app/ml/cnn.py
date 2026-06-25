@@ -8,7 +8,9 @@ def build_small_cnn(num_classes: int):
     try:
         import torch.nn as nn
     except ImportError as exc:
-        raise RuntimeError("PyTorch is required only in the optional ML training environment") from exc
+        raise RuntimeError(
+            "PyTorch is required only in the optional ML training environment"
+        ) from exc
 
     class SmallRfCnn(nn.Module):
         def __init__(self) -> None:

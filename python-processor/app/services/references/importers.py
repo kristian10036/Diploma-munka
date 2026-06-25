@@ -98,7 +98,9 @@ class CsvReferenceImporter(ReferenceImporter):
             reader = csv.DictReader(io.StringIO(text), dialect=dialect)
             rows = list(reader)
         except csv.Error as exc:
-            raise ReferenceImportError("invalid_csv", "A CSV nem értelmezhető táblázatként.") from exc
+            raise ReferenceImportError(
+                "invalid_csv", "A CSV nem értelmezhető táblázatként."
+            ) from exc
         if not reader.fieldnames:
             raise ReferenceImportError("missing_csv_header", "A CSV fejlécet nem tartalmaz.")
         return rows
@@ -109,7 +111,11 @@ class CsvReferenceImporter(ReferenceImporter):
     def import_points(self, payload: bytes) -> ImportedReference:
         points: list[tuple[int, float]] = []
         for raw_row in self._rows(payload):
-            row = {_normalize_column(str(key)): value for key, value in raw_row.items() if key is not None}
+            row = {
+                _normalize_column(str(key)): value
+                for key, value in raw_row.items()
+                if key is not None
+            }
             frequency: Any = (
                 row.get("frequency_hz")
                 or row.get("actual_rf_frequency_hz")
@@ -154,13 +160,19 @@ class JsonReferenceImporter(ReferenceImporter):
         try:
             value = json.loads(payload)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ReferenceImportError("invalid_json", "A JSON referencia nem értelmezhető.") from exc
+            raise ReferenceImportError(
+                "invalid_json", "A JSON referencia nem értelmezhető."
+            ) from exc
         metadata = value.get("metadata", {}) if isinstance(value, dict) else {}
         rows = value.get("points", []) if isinstance(value, dict) else value
         if not isinstance(metadata, dict):
-            raise ReferenceImportError("invalid_json_metadata", "A metadata mezőnek objektumnak kell lennie.")
+            raise ReferenceImportError(
+                "invalid_json_metadata", "A metadata mezőnek objektumnak kell lennie."
+            )
         if not isinstance(rows, list):
-            raise ReferenceImportError("invalid_json_points", "A points mezőnek tömbnek kell lennie.")
+            raise ReferenceImportError(
+                "invalid_json_points", "A points mezőnek tömbnek kell lennie."
+            )
         points: list[tuple[int, float]] = []
         for row in rows:
             if not isinstance(row, dict):
@@ -199,8 +211,8 @@ class OscorPeakPlaceholder(ReferenceImporter):
     def import_points(self, payload: bytes) -> ImportedReference:
         raise ReferenceImportError(
             "unsupported_peak_format",
-            "A proprietary .peak formátum dokumentáció vagy validált mintafájl nélkül nem támogatott. "
-            "Exportálj CSV-t az OSCOR Data Viewerből.",
+            "A proprietary .peak formátum dokumentáció vagy validált mintafájl nélkül "
+            "nem támogatott. Exportálj CSV-t az OSCOR Data Viewerből.",
         )
 
 

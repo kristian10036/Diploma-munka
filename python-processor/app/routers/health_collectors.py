@@ -10,17 +10,35 @@ from psycopg.types.json import Jsonb
 
 from app.db import get_db
 from app.metrics import COLLECTOR_STATUS
-from app.rf_agent_client import rf_agent_status
 from app.ml import RF_CLASSES
-from app.runtime import (BETTERCAP_COLLECTOR, BETTERCAP_IMPORT_LOCK, BETTERCAP_IMPORT_STATE,
-    BETTERCAP_SETTINGS, BLUETOOTH_ADAPTER_CONFLICT_WARNING, DATABASE_URL, DEVICE_IMPORT_TABLES,
-    KISMET_COLLECTOR, KISMET_IMPORT_LOCK, KISMET_IMPORT_STATE, KISMET_SETTINGS, ML_CLASSIFIER,
-    MQTT_BROKER, OLLAMA_URL, RF_AGENT_SETTINGS, SPECTRUM_SETTINGS, SPECTRUM_SOURCE_MANAGER,
-    RECORDING_STORAGE, ASSISTANT_SETTINGS, mqtt_status)
-from app.security import SETTINGS as SECURITY_SETTINGS
+from app.rf_agent_client import rf_agent_status
+from app.runtime import (
+    ASSISTANT_SETTINGS,
+    BETTERCAP_COLLECTOR,
+    BETTERCAP_IMPORT_LOCK,
+    BETTERCAP_IMPORT_STATE,
+    BETTERCAP_SETTINGS,
+    BLUETOOTH_ADAPTER_CONFLICT_WARNING,
+    DATABASE_URL,
+    DEVICE_IMPORT_TABLES,
+    KISMET_COLLECTOR,
+    KISMET_IMPORT_LOCK,
+    KISMET_IMPORT_STATE,
+    KISMET_SETTINGS,
+    ML_CLASSIFIER,
+    OLLAMA_URL,
+    RECORDING_STORAGE,
+    RF_AGENT_SETTINGS,
+    SPECTRUM_SOURCE_MANAGER,
+    mqtt_status,
+)
 from app.schemas import MlClassifyRequest
-from app.services.persistence import (ensure_bettercap_measurement_source,
-    ensure_kismet_measurement_source, resolve_import_session)
+from app.security import SETTINGS as SECURITY_SETTINGS
+from app.services.persistence import (
+    ensure_bettercap_measurement_source,
+    ensure_kismet_measurement_source,
+    resolve_import_session,
+)
 from app.utils.parsing import (
     is_kismet_bluetooth_row,
     mac_is_locally_administered,
@@ -35,7 +53,9 @@ router = APIRouter()
 
 
 def _same_text(left: Any, right: Any) -> bool:
-    return ("" if left is None else str(left).strip()) == ("" if right is None else str(right).strip())
+    return ("" if left is None else str(left).strip()) == (
+        "" if right is None else str(right).strip()
+    )
 
 
 def _same_int(left: Any, right: Any) -> bool:
@@ -78,7 +98,9 @@ def _heartbeat_due(previous_observed_at: Any, current_observed_at: datetime) -> 
     return current_observed_at - previous_observed_at >= heartbeat
 
 
-def _wifi_history_needed(cur, session_id: Any, location_name: str | None, bssid: str, fields: dict[str, Any]) -> bool:
+def _wifi_history_needed(
+    cur, session_id: Any, location_name: str | None, bssid: str, fields: dict[str, Any]
+) -> bool:
     cur.execute(
         """
         SELECT COALESCE(observed_at, time) AS observed_at,
@@ -111,13 +133,15 @@ def _wifi_history_needed(cur, session_id: Any, location_name: str | None, bssid:
     )
 
 
-def _bluetooth_history_needed(cur, session_id: Any, location_name: str | None, mac: str, fields: dict[str, Any]) -> bool:
+def _bluetooth_history_needed(
+    cur, session_id: Any, location_name: str | None, mac: str, fields: dict[str, Any]
+) -> bool:
     cur.execute(
         """
         SELECT COALESCE(observed_at, time) AS observed_at,
                device_name, rssi_dbm, vendor, service_uuids, address_type, bluetooth_type,
-               vendor_resolution_method, vendor_confidence, bluetooth_company_id, manufacturer_data_hash,
-               stable_identity, identity_confidence
+               vendor_resolution_method, vendor_confidence, bluetooth_company_id,
+               manufacturer_data_hash, stable_identity, identity_confidence
         FROM bluetooth_observations
         WHERE mac_address = %s
           AND measurement_session_id IS NOT DISTINCT FROM %s
@@ -196,7 +220,11 @@ def _merge_bluetooth_vendor_fields(cur, mac: str, fields: dict[str, Any]) -> dic
 
 
 def _increment_wifi_management_frame_count(
-    cur, bssid: str | None, frame_type_raw: str | None, alert_type_raw: str | None, increment: int | None,
+    cur,
+    bssid: str | None,
+    frame_type_raw: str | None,
+    alert_type_raw: str | None,
+    increment: int | None,
 ) -> None:
     """Best-effort per-device management-frame counter, derived only from frame
     types we can actually recognize in the ingested Kismet alert/eventbus data.
@@ -204,7 +232,9 @@ def _increment_wifi_management_frame_count(
     """
     if not bssid:
         return
-    canonical_type = normalize_wifi_management_frame_type(frame_type_raw) or normalize_wifi_management_frame_type(alert_type_raw)
+    canonical_type = normalize_wifi_management_frame_type(
+        frame_type_raw
+    ) or normalize_wifi_management_frame_type(alert_type_raw)
     if not canonical_type:
         return
     safe_increment = increment if isinstance(increment, int) and increment > 0 else 1
@@ -255,12 +285,24 @@ def _upsert_wifi_security_alert(
           metadata = system_alerts.metadata || EXCLUDED.metadata,
           updated_at = now()
         """,
-        (severity, source, alert_type, message, entity_id, Jsonb(metadata), dedup_key, observed_at, session_id),
+        (
+            severity,
+            source,
+            alert_type,
+            message,
+            entity_id,
+            Jsonb(metadata),
+            dedup_key,
+            observed_at,
+            session_id,
+        ),
     )
 
 
 def _wifi_security_change_alerts(
-    previous: dict[str, Any] | None, fields: dict[str, Any], bssid: str,
+    previous: dict[str, Any] | None,
+    fields: dict[str, Any],
+    bssid: str,
 ) -> list[dict[str, Any]]:
     """Locally derived Wi-Fi security events for conditions Kismet does not
     natively alert on: a brand-new open/unencrypted AP, a known AP changing its
@@ -290,38 +332,52 @@ def _wifi_security_change_alerts(
             # never-before-seen open "APs" in a populated area fall in this
             # bucket).
             confidence = "low" if mac_is_locally_administered(bssid) else "medium"
-            alerts.append({
-                "alert_type": "new_open_ap",
-                "severity": "warning",
-                "confidence": confidence,
-                "message": f"Új, titkosítás nélküli AP jelent meg: {fields.get('ssid') or bssid}",
-                "dedup_key": f"wifi_security:new_open_ap:{bssid}",
-                **common,
-            })
+            alerts.append(
+                {
+                    "alert_type": "new_open_ap",
+                    "severity": "warning",
+                    "confidence": confidence,
+                    "message": (
+                        f"Új, titkosítás nélküli AP jelent meg: {fields.get('ssid') or bssid}"
+                    ),
+                    "dedup_key": f"wifi_security:new_open_ap:{bssid}",
+                    **common,
+                }
+            )
         return alerts
 
     previous_encryption = (previous.get("encryption") or "").strip().lower()
     if previous_encryption and encryption and previous_encryption != encryption:
-        alerts.append({
-            "alert_type": "ap_security_changed",
-            "severity": "warning" if is_open else "info",
-            "confidence": "high",
-            "message": f"Ismert AP ({bssid}) titkosítása megváltozott: {previous_encryption} -> {encryption}",
-            "dedup_key": f"wifi_security:ap_security_changed:{bssid}:{encryption}",
-            **common,
-        })
+        alerts.append(
+            {
+                "alert_type": "ap_security_changed",
+                "severity": "warning" if is_open else "info",
+                "confidence": "high",
+                "message": (
+                    f"Ismert AP ({bssid}) titkosítása megváltozott: "
+                    f"{previous_encryption} -> {encryption}"
+                ),
+                "dedup_key": f"wifi_security:ap_security_changed:{bssid}:{encryption}",
+                **common,
+            }
+        )
 
     previous_ssid = (previous.get("ssid") or "").strip()
     current_ssid = (fields.get("ssid") or "").strip()
     if previous_ssid and current_ssid and previous_ssid != current_ssid:
-        alerts.append({
-            "alert_type": "bssid_fingerprint_changed",
-            "severity": "warning",
-            "confidence": "medium",
-            "message": f"Azonos BSSID ({bssid}) más SSID-vel jelent meg: {previous_ssid} -> {current_ssid}",
-            "dedup_key": f"wifi_security:bssid_fingerprint_changed:{bssid}:{current_ssid}",
-            **common,
-        })
+        alerts.append(
+            {
+                "alert_type": "bssid_fingerprint_changed",
+                "severity": "warning",
+                "confidence": "medium",
+                "message": (
+                    f"Azonos BSSID ({bssid}) más SSID-vel jelent meg: "
+                    f"{previous_ssid} -> {current_ssid}"
+                ),
+                "dedup_key": f"wifi_security:bssid_fingerprint_changed:{bssid}:{current_ssid}",
+                **common,
+            }
+        )
     return alerts
 
 
@@ -332,7 +388,11 @@ async def health_live():
 
 def _database_health() -> dict[str, Any]:
     if not DATABASE_URL:
-        return {"configured": False, "required": SECURITY_SETTINGS.app_mode == "production", "status": "not_configured"}
+        return {
+            "configured": False,
+            "required": SECURITY_SETTINGS.app_mode == "production",
+            "status": "not_configured",
+        }
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -340,13 +400,22 @@ def _database_health() -> dict[str, Any]:
                 cur.fetchone()
         return {"configured": True, "required": True, "status": "available"}
     except Exception as exc:
-        return {"configured": True, "required": True, "status": "unavailable", "error_type": type(exc).__name__}
+        return {
+            "configured": True,
+            "required": True,
+            "status": "unavailable",
+            "error_type": type(exc).__name__,
+        }
 
 
 def _recording_health() -> dict[str, Any]:
     try:
         storage = RECORDING_STORAGE.status().as_dict()
-        state = "unavailable" if not storage["writable"] else ("degraded" if storage["low_disk"] else "available")
+        state = (
+            "unavailable"
+            if not storage["writable"]
+            else ("degraded" if storage["low_disk"] else "available")
+        )
         return {"required": True, "status": state, **storage}
     except Exception as exc:
         return {"required": True, "status": "unavailable", "error_type": type(exc).__name__}
@@ -362,14 +431,21 @@ async def _detailed_health() -> dict[str, Any]:
         asyncio.to_thread(ASSISTANT_SETTINGS.live_status),
         asyncio.to_thread(rf_agent_status, RF_AGENT_SETTINGS),
     )
-    COLLECTOR_STATUS.labels(collector="spectrum_source").set(1 if spectrum.get("status") in {"ok", "ready", "running"} else 0)
+    COLLECTOR_STATUS.labels(collector="spectrum_source").set(
+        1 if spectrum.get("status") in {"ok", "ready", "running"} else 0
+    )
     COLLECTOR_STATUS.labels(collector="mqtt").set(1 if mqtt_status().get("available") else 0)
-    COLLECTOR_STATUS.labels(collector="kismet").set(1 if KISMET_SETTINGS.enabled and KISMET_IMPORT_STATE.get("last_error") is None else 0)
+    COLLECTOR_STATUS.labels(collector="kismet").set(
+        1 if KISMET_SETTINGS.enabled and KISMET_IMPORT_STATE.get("last_error") is None else 0
+    )
     COLLECTOR_STATUS.labels(collector="bettercap").set(
         1 if BETTERCAP_SETTINGS.enabled and BETTERCAP_IMPORT_STATE.get("last_error") is None else 0
     )
-    core_failures = [name for name, value in {"database": database, "recording_storage": recording}.items()
-                     if value.get("required") and value.get("status") == "unavailable"]
+    core_failures = [
+        name
+        for name, value in {"database": database, "recording_storage": recording}.items()
+        if value.get("required") and value.get("status") == "unavailable"
+    ]
     return {
         "status": "ready" if not core_failures else "not_ready",
         "service": "tscm-backend",
@@ -420,8 +496,18 @@ def ml_models():
     return {
         "models": [
             status,
-            {"available": False, "status": "not_trained", "model_version": "rf_nearest_centroid_v1", "model_type": "classical_ml"},
-            {"available": False, "status": "not_trained", "model_version": "rf_small_cnn_v1", "model_type": "cnn"},
+            {
+                "available": False,
+                "status": "not_trained",
+                "model_version": "rf_nearest_centroid_v1",
+                "model_type": "classical_ml",
+            },
+            {
+                "available": False,
+                "status": "not_trained",
+                "model_version": "rf_small_cnn_v1",
+                "model_type": "cnn",
+            },
         ],
         "classes": list(RF_CLASSES),
     }
@@ -430,7 +516,9 @@ def ml_models():
 @router.post("/api/ml/classify")
 def ml_classify(request: MlClassifyRequest):
     if not 1 <= len(request.frames) <= 128:
-        raise HTTPException(status_code=422, detail="frames must contain between 1 and 128 SpectrumFrame objects")
+        raise HTTPException(
+            status_code=422, detail="frames must contain between 1 and 128 SpectrumFrame objects"
+        )
     try:
         return ML_CLASSIFIER.classify(request.frames)
     except (TypeError, ValueError) as exc:
@@ -465,8 +553,6 @@ async def kismet_import_status():
     }
 
 
-
-
 @router.get("/api/kismet/devices")
 async def kismet_live_devices(limit: int = 100):
     limit = max(1, min(limit, 5000))
@@ -485,7 +571,9 @@ async def kismet_live_alerts(limit: int = 100):
     return result
 
 
-def import_kismet_alert_rows(result: dict[str, Any], measurement_session_id: str | None = None) -> dict[str, Any]:
+def import_kismet_alert_rows(
+    result: dict[str, Any], measurement_session_id: str | None = None
+) -> dict[str, Any]:
     rows = result.get("alerts", [])
     imported_at = datetime.now(timezone.utc)
     imported_alerts = 0
@@ -496,7 +584,9 @@ def import_kismet_alert_rows(result: dict[str, Any], measurement_session_id: str
             for row_number, row in enumerate(rows, start=1):
                 if not isinstance(row, dict):
                     skipped_rows += 1
-                    errors.append({"row_number": row_number, "error": "Nem objektum tipusu Kismet alert sor."})
+                    errors.append(
+                        {"row_number": row_number, "error": "Nem objektum tipusu Kismet alert sor."}
+                    )
                     continue
                 try:
                     fields = normalize_kismet_alert_row(row, imported_at)
@@ -517,7 +607,11 @@ def import_kismet_alert_rows(result: dict[str, Any], measurement_session_id: str
                         "event_count": fields["event_count"],
                         "raw_alert": row,
                     }
-                    entity_id = fields["bssid"] or fields["suspected_transmitter_mac"] or fields["destination_mac"]
+                    entity_id = (
+                        fields["bssid"]
+                        or fields["suspected_transmitter_mac"]
+                        or fields["destination_mac"]
+                    )
                     _upsert_wifi_security_alert(
                         cur,
                         severity=fields["severity"],
@@ -593,7 +687,9 @@ def import_kismet_device_rows(
             for row_number, row in enumerate(rows, start=1):
                 if not isinstance(row, dict):
                     skipped_rows += 1
-                    errors.append({"row_number": row_number, "error": "Nem objektum tipusu Kismet sor."})
+                    errors.append(
+                        {"row_number": row_number, "error": "Nem objektum tipusu Kismet sor."}
+                    )
                     continue
 
                 try:
@@ -602,9 +698,13 @@ def import_kismet_device_rows(
                         mac = fields["mac"]
                         if not mac:
                             skipped_rows += 1
-                            errors.append({"row_number": row_number, "error": "Hianyzo Bluetooth MAC cim."})
+                            errors.append(
+                                {"row_number": row_number, "error": "Hianyzo Bluetooth MAC cim."}
+                            )
                             continue
-                        primary_service_uuid = fields["service_uuids"][0] if fields["service_uuids"] else None
+                        primary_service_uuid = (
+                            fields["service_uuids"][0] if fields["service_uuids"] else None
+                        )
                         vendor_fields = _merge_bluetooth_vendor_fields(cur, mac, fields)
                         cur.execute(
                             """
@@ -612,10 +712,14 @@ def import_kismet_device_rows(
                               (mac_address, device_name, vendor, first_seen, last_seen,
                                address_type, bluetooth_type, vendor_resolution_method,
                                vendor_confidence, bluetooth_company_id, manufacturer_data_hash,
-                               stable_identity, identity_confidence, metadata, created_at, updated_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                               stable_identity, identity_confidence, metadata, created_at,
+                               updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                    now(), now())
                             ON CONFLICT (mac_address) DO UPDATE SET
-                              device_name = COALESCE(EXCLUDED.device_name, bluetooth_devices.device_name),
+                              device_name = COALESCE(
+                                EXCLUDED.device_name, bluetooth_devices.device_name
+                              ),
                               vendor = EXCLUDED.vendor,
                               first_seen = LEAST(
                                 COALESCE(bluetooth_devices.first_seen, EXCLUDED.first_seen),
@@ -625,14 +729,22 @@ def import_kismet_device_rows(
                                 COALESCE(bluetooth_devices.last_seen, EXCLUDED.last_seen),
                                 EXCLUDED.last_seen
                               ),
-                              address_type = COALESCE(EXCLUDED.address_type, bluetooth_devices.address_type),
-                              bluetooth_type = COALESCE(EXCLUDED.bluetooth_type, bluetooth_devices.bluetooth_type),
+                              address_type = COALESCE(
+                                EXCLUDED.address_type, bluetooth_devices.address_type
+                              ),
+                              bluetooth_type = COALESCE(
+                                EXCLUDED.bluetooth_type, bluetooth_devices.bluetooth_type
+                              ),
                               vendor_resolution_method = EXCLUDED.vendor_resolution_method,
                               vendor_confidence = EXCLUDED.vendor_confidence,
                               bluetooth_company_id = EXCLUDED.bluetooth_company_id,
                               manufacturer_data_hash = EXCLUDED.manufacturer_data_hash,
-                              stable_identity = COALESCE(EXCLUDED.stable_identity, bluetooth_devices.stable_identity),
-                              identity_confidence = COALESCE(EXCLUDED.identity_confidence, bluetooth_devices.identity_confidence),
+                              stable_identity = COALESCE(
+                                EXCLUDED.stable_identity, bluetooth_devices.stable_identity
+                              ),
+                              identity_confidence = COALESCE(
+                                EXCLUDED.identity_confidence, bluetooth_devices.identity_confidence
+                              ),
                               metadata = bluetooth_devices.metadata || EXCLUDED.metadata,
                               updated_at = now()
                             """,
@@ -650,10 +762,17 @@ def import_kismet_device_rows(
                                 vendor_fields["manufacturer_data_hash"],
                                 fields["stable_identity"],
                                 fields["identity_confidence"],
-                                Jsonb({"last_source": cleaned_source_name, "last_kismet_live_import": imported_at.isoformat()}),
+                                Jsonb(
+                                    {
+                                        "last_source": cleaned_source_name,
+                                        "last_kismet_live_import": imported_at.isoformat(),
+                                    }
+                                ),
                             ),
                         )
-                        if _bluetooth_history_needed(cur, session_id, resolved_location_name, mac, fields):
+                        if _bluetooth_history_needed(
+                            cur, session_id, resolved_location_name, mac, fields
+                        ):
                             cur.execute(
                                 """
                                 INSERT INTO bluetooth_observations
@@ -668,7 +787,8 @@ def import_kismet_device_rows(
                                    created_at)
                                 VALUES
                                   (%s, %s, %s, %s, %s, %s, %s, 'kismet', %s, %s,
-                                   %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                                   %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                   now())
                                 """,
                                 (
                                     fields["observed_at"],
@@ -695,7 +815,12 @@ def import_kismet_device_rows(
                                     fields["observation_count"],
                                     cleaned_source_name,
                                     Jsonb(row),
-                                    Jsonb({"source_url": result.get("url"), "fetched_at": result.get("fetched_at")}),
+                                    Jsonb(
+                                        {
+                                            "source_url": result.get("url"),
+                                            "fetched_at": result.get("fetched_at"),
+                                        }
+                                    ),
                                 ),
                             )
                             imported_bluetooth += 1
@@ -706,7 +831,9 @@ def import_kismet_device_rows(
                         bssid = fields["bssid"]
                         if not bssid:
                             skipped_rows += 1
-                            errors.append({"row_number": row_number, "error": "Hianyzo Wi-Fi BSSID/MAC cim."})
+                            errors.append(
+                                {"row_number": row_number, "error": "Hianyzo Wi-Fi BSSID/MAC cim."}
+                            )
                             continue
                         cur.execute(
                             "SELECT ssid, encryption FROM wifi_devices WHERE bssid = %s",
@@ -725,12 +852,17 @@ def import_kismet_device_rows(
                               vendor = COALESCE(EXCLUDED.vendor, wifi_devices.vendor),
                               encryption = COALESCE(EXCLUDED.encryption, wifi_devices.encryption),
                               device_type = CASE
-                                WHEN EXCLUDED.device_type IS NOT NULL AND EXCLUDED.device_type <> 'unknown'
+                                WHEN EXCLUDED.device_type IS NOT NULL
+                                     AND EXCLUDED.device_type <> 'unknown'
                                 THEN EXCLUDED.device_type
                                 ELSE wifi_devices.device_type
                               END,
-                              stable_identity = COALESCE(EXCLUDED.stable_identity, wifi_devices.stable_identity),
-                              identity_confidence = COALESCE(EXCLUDED.identity_confidence, wifi_devices.identity_confidence),
+                              stable_identity = COALESCE(
+                                EXCLUDED.stable_identity, wifi_devices.stable_identity
+                              ),
+                              identity_confidence = COALESCE(
+                                EXCLUDED.identity_confidence, wifi_devices.identity_confidence
+                              ),
                               first_seen = LEAST(
                                 COALESCE(wifi_devices.first_seen, EXCLUDED.first_seen),
                                 EXCLUDED.first_seen
@@ -752,10 +884,17 @@ def import_kismet_device_rows(
                                 fields["device_type"],
                                 fields["stable_identity"],
                                 fields["identity_confidence"],
-                                Jsonb({"last_source": cleaned_source_name, "last_kismet_live_import": imported_at.isoformat()}),
+                                Jsonb(
+                                    {
+                                        "last_source": cleaned_source_name,
+                                        "last_kismet_live_import": imported_at.isoformat(),
+                                    }
+                                ),
                             ),
                         )
-                        for security_alert in _wifi_security_change_alerts(previous_wifi_device, fields, bssid):
+                        for security_alert in _wifi_security_change_alerts(
+                            previous_wifi_device, fields, bssid
+                        ):
                             _upsert_wifi_security_alert(
                                 cur,
                                 severity=security_alert["severity"],
@@ -768,7 +907,9 @@ def import_kismet_device_rows(
                                 source="kismet_live_api",
                                 session_id=session_id,
                             )
-                        if _wifi_history_needed(cur, session_id, resolved_location_name, bssid, fields):
+                        if _wifi_history_needed(
+                            cur, session_id, resolved_location_name, bssid, fields
+                        ):
                             cur.execute(
                                 """
                                 INSERT INTO wifi_observations
@@ -805,7 +946,12 @@ def import_kismet_device_rows(
                                     fields["packet_count"],
                                     cleaned_source_name,
                                     Jsonb(row),
-                                    Jsonb({"source_url": result.get("url"), "fetched_at": result.get("fetched_at")}),
+                                    Jsonb(
+                                        {
+                                            "source_url": result.get("url"),
+                                            "fetched_at": result.get("fetched_at"),
+                                        }
+                                    ),
                                 ),
                             )
                             imported_wifi += 1
@@ -866,7 +1012,9 @@ async def run_kismet_live_import(
                 "last_imported_wifi": imported.get("imported_wifi", 0),
                 "last_imported_bluetooth": imported.get("imported_bluetooth", 0),
                 "last_suppressed_wifi_history": imported.get("suppressed_wifi_history", 0),
-                "last_suppressed_bluetooth_history": imported.get("suppressed_bluetooth_history", 0),
+                "last_suppressed_bluetooth_history": imported.get(
+                    "suppressed_bluetooth_history", 0
+                ),
                 "last_skipped_rows": imported.get("skipped_rows", 0),
                 "last_error": None,
             }
@@ -897,7 +1045,9 @@ async def import_kismet_alerts(measurement_session_id: str | None = None):
             KISMET_IMPORT_STATE["last_error"] = result["error"]
             raise HTTPException(status_code=503, detail=f"Kismet alert API hiba: {result['error']}")
         try:
-            imported = await asyncio.to_thread(import_kismet_alert_rows, result, measurement_session_id)
+            imported = await asyncio.to_thread(
+                import_kismet_alert_rows, result, measurement_session_id
+            )
         except Exception as exc:
             detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
             KISMET_IMPORT_STATE["last_error"] = str(detail)
@@ -954,7 +1104,12 @@ def import_bettercap_ble_rows(
             for row_number, row in enumerate(rows, start=1):
                 if not isinstance(row, dict):
                     skipped_rows += 1
-                    errors.append({"row_number": row_number, "error": "Nem objektum tipusu Bettercap BLE sor."})
+                    errors.append(
+                        {
+                            "row_number": row_number,
+                            "error": "Nem objektum tipusu Bettercap BLE sor.",
+                        }
+                    )
                     continue
 
                 try:
@@ -962,7 +1117,9 @@ def import_bettercap_ble_rows(
                     mac = fields["mac"]
                     if not mac:
                         skipped_rows += 1
-                        errors.append({"row_number": row_number, "error": "Hianyzo Bluetooth MAC cim."})
+                        errors.append(
+                            {"row_number": row_number, "error": "Hianyzo Bluetooth MAC cim."}
+                        )
                         continue
                     service_uuids = fields["service_uuids"]
                     primary_service_uuid = service_uuids[0] if service_uuids else None
@@ -974,9 +1131,12 @@ def import_bettercap_ble_rows(
                            address_type, bluetooth_type, vendor_resolution_method,
                            vendor_confidence, bluetooth_company_id, manufacturer_data_hash,
                            stable_identity, identity_confidence, metadata, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                now(), now())
                         ON CONFLICT (mac_address) DO UPDATE SET
-                          device_name = COALESCE(EXCLUDED.device_name, bluetooth_devices.device_name),
+                          device_name = COALESCE(
+                            EXCLUDED.device_name, bluetooth_devices.device_name
+                          ),
                           vendor = EXCLUDED.vendor,
                           first_seen = LEAST(
                             COALESCE(bluetooth_devices.first_seen, EXCLUDED.first_seen),
@@ -986,14 +1146,22 @@ def import_bettercap_ble_rows(
                             COALESCE(bluetooth_devices.last_seen, EXCLUDED.last_seen),
                             EXCLUDED.last_seen
                           ),
-                          address_type = COALESCE(EXCLUDED.address_type, bluetooth_devices.address_type),
-                          bluetooth_type = COALESCE(EXCLUDED.bluetooth_type, bluetooth_devices.bluetooth_type),
+                          address_type = COALESCE(
+                            EXCLUDED.address_type, bluetooth_devices.address_type
+                          ),
+                          bluetooth_type = COALESCE(
+                            EXCLUDED.bluetooth_type, bluetooth_devices.bluetooth_type
+                          ),
                           vendor_resolution_method = EXCLUDED.vendor_resolution_method,
                           vendor_confidence = EXCLUDED.vendor_confidence,
                           bluetooth_company_id = EXCLUDED.bluetooth_company_id,
                           manufacturer_data_hash = EXCLUDED.manufacturer_data_hash,
-                          stable_identity = COALESCE(EXCLUDED.stable_identity, bluetooth_devices.stable_identity),
-                          identity_confidence = COALESCE(EXCLUDED.identity_confidence, bluetooth_devices.identity_confidence),
+                          stable_identity = COALESCE(
+                            EXCLUDED.stable_identity, bluetooth_devices.stable_identity
+                          ),
+                          identity_confidence = COALESCE(
+                            EXCLUDED.identity_confidence, bluetooth_devices.identity_confidence
+                          ),
                           metadata = bluetooth_devices.metadata || EXCLUDED.metadata,
                           updated_at = now()
                         """,
@@ -1011,10 +1179,17 @@ def import_bettercap_ble_rows(
                             vendor_fields["manufacturer_data_hash"],
                             fields["stable_identity"],
                             fields["identity_confidence"],
-                            Jsonb({"last_source": cleaned_source_name, "last_bettercap_live_import": imported_at.isoformat()}),
+                            Jsonb(
+                                {
+                                    "last_source": cleaned_source_name,
+                                    "last_bettercap_live_import": imported_at.isoformat(),
+                                }
+                            ),
                         ),
                     )
-                    if _bluetooth_history_needed(cur, session_id, resolved_location_name, mac, fields):
+                    if _bluetooth_history_needed(
+                        cur, session_id, resolved_location_name, mac, fields
+                    ):
                         cur.execute(
                             """
                             INSERT INTO bluetooth_observations
@@ -1029,7 +1204,8 @@ def import_bettercap_ble_rows(
                                created_at)
                             VALUES
                               (%s, %s, %s, %s, %s, %s, %s, 'bettercap_ble', %s, %s,
-                               %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                               %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                               now())
                             """,
                             (
                                 fields["observed_at"],
@@ -1056,7 +1232,12 @@ def import_bettercap_ble_rows(
                                 fields["observation_count"],
                                 cleaned_source_name,
                                 Jsonb(row),
-                                Jsonb({"source_url": result.get("url"), "fetched_at": result.get("fetched_at")}),
+                                Jsonb(
+                                    {
+                                        "source_url": result.get("url"),
+                                        "fetched_at": result.get("fetched_at"),
+                                    }
+                                ),
                             ),
                         )
                         imported_bluetooth += 1
@@ -1113,7 +1294,9 @@ async def run_bettercap_live_import(
             {
                 "last_import_at": datetime.now(timezone.utc).isoformat(),
                 "last_imported_bluetooth": imported.get("imported_bluetooth", 0),
-                "last_suppressed_bluetooth_history": imported.get("suppressed_bluetooth_history", 0),
+                "last_suppressed_bluetooth_history": imported.get(
+                    "suppressed_bluetooth_history", 0
+                ),
                 "last_skipped_rows": imported.get("skipped_rows", 0),
                 "last_error": None,
             }

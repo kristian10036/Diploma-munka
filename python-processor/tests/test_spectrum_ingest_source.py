@@ -37,7 +37,9 @@ class SpectrumIngestSourceTests(unittest.TestCase):
 
     def test_rejects_shape_mismatch(self):
         with self.assertRaisesRegex(ValueError, "shape"):
-            SpectrumIngestWebSocketSource._parse_frame(json.dumps(frame(num_points=4, point_count=4)))
+            SpectrumIngestWebSocketSource._parse_frame(
+                json.dumps(frame(num_points=4, point_count=4))
+            )
 
     def test_configuration_uses_fixed_environment_url(self):
         settings = SpectrumSettings.from_env()

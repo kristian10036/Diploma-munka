@@ -2,6 +2,10 @@ fastapi==0.128.2
 httpx==0.28.1
 numpy==2.3.5
 paho-mqtt==2.1.0
+# fastapi only requires pydantic>=2.7.0 (no ceiling); pin a narrow range so an
+# unrelated pydantic bump can't silently reshape the OpenAPI schema checked by
+# tests/test_openapi_snapshot.py.
+pydantic>=2.13.4,<2.14.0
 prometheus-client==0.22.1
 psycopg[binary]==3.3.4
 python-multipart==0.0.21

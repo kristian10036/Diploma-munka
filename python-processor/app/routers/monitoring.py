@@ -16,21 +16,23 @@ from app.runtime import PROMETHEUS_URL, mqtt_status
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 
 _ALLOWED_QUERIES = {
-    "request_rate": 'sum(rate(dm_http_requests_total[5m]))',
-    "request_latency_p95": 'histogram_quantile(0.95, sum(rate(dm_http_request_duration_seconds_bucket[5m])) by (le))',
-    "spectrum_fps": 'sum(rate(dm_spectrum_frames_total[1m]))',
-    "spectrum_clients": 'dm_backend_websocket_clients',
-    "ingest_fps": 'spectrum_ingest_source_fps',
-    "ingest_dropped": 'spectrum_ingest_dropped_frames_total',
-    "ingest_invalid": 'spectrum_ingest_invalid_frames_total',
-    "ingest_clients": 'spectrum_ingest_connected_clients',
-    "db_errors": 'increase(dm_db_connection_errors_total[1h])',
-    "anomaly_queue": 'dm_anomaly_queue_depth',
-    "anomaly_drops": 'dm_anomaly_queue_dropped_frames',
-    "recording_disk_free": 'dm_recording_disk_free_bytes',
-    "alerts_open": 'sum(dm_alerts_open)',
-    "sdrangel_drops": 'dm_sdrangel_iq_packets_dropped',
-    "sdrangel_packet_loss": 'dm_sdrangel_iq_packet_loss',
+    "request_rate": "sum(rate(dm_http_requests_total[5m]))",
+    "request_latency_p95": (
+        "histogram_quantile(0.95, sum(rate(dm_http_request_duration_seconds_bucket[5m])) by (le))"
+    ),
+    "spectrum_fps": "sum(rate(dm_spectrum_frames_total[1m]))",
+    "spectrum_clients": "dm_backend_websocket_clients",
+    "ingest_fps": "spectrum_ingest_source_fps",
+    "ingest_dropped": "spectrum_ingest_dropped_frames_total",
+    "ingest_invalid": "spectrum_ingest_invalid_frames_total",
+    "ingest_clients": "spectrum_ingest_connected_clients",
+    "db_errors": "increase(dm_db_connection_errors_total[1h])",
+    "anomaly_queue": "dm_anomaly_queue_depth",
+    "anomaly_drops": "dm_anomaly_queue_dropped_frames",
+    "recording_disk_free": "dm_recording_disk_free_bytes",
+    "alerts_open": "sum(dm_alerts_open)",
+    "sdrangel_drops": "dm_sdrangel_iq_packets_dropped",
+    "sdrangel_packet_loss": "dm_sdrangel_iq_packet_loss",
 }
 
 
@@ -146,11 +148,21 @@ def monitoring_series(
             },
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail={"code": "prometheus_unavailable", "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=503, detail={"code": "prometheus_unavailable", "message": str(exc)}
+        ) from exc
     series = []
     for item in data.get("result", []):
-        series.append({
-            "metric": item.get("metric", {}),
-            "values": [[float(ts), float(value)] for ts, value in item.get("values", [])],
-        })
-    return {"name": series_name, "query": query, "series": series, "start": start.isoformat(), "end": end.isoformat()}
+        series.append(
+            {
+                "metric": item.get("metric", {}),
+                "values": [[float(ts), float(value)] for ts, value in item.get("values", [])],
+            }
+        )
+    return {
+        "name": series_name,
+        "query": query,
+        "series": series,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+    }

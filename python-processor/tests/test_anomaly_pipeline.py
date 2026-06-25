@@ -5,7 +5,6 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
-
 from app.services.anomaly import (
     OnlineAnomalyPipeline,
     SpectrumAnomalyConfig,
@@ -69,13 +68,23 @@ class SpectrumDetectorTests(unittest.TestCase):
 
 class PassiveDetectorTests(unittest.TestCase):
     def test_wifi_encryption_and_location_changes(self):
-        history = [{
-            "bssid": "AA:BB:CC:DD:EE:FF", "ssid": "Office", "encryption": "WPA2",
-            "location_id": "A", "rssi_dbm": -70, "vendor": "Acme",
-        }]
+        history = [
+            {
+                "bssid": "AA:BB:CC:DD:EE:FF",
+                "ssid": "Office",
+                "encryption": "WPA2",
+                "location_id": "A",
+                "rssi_dbm": -70,
+                "vendor": "Acme",
+            }
+        ]
         current = {
-            "bssid": "AA:BB:CC:DD:EE:FF", "ssid": "Office", "encryption": "open",
-            "location_id": "B", "rssi_dbm": -40, "vendor": "Other",
+            "bssid": "AA:BB:CC:DD:EE:FF",
+            "ssid": "Office",
+            "encryption": "open",
+            "location_id": "B",
+            "rssi_dbm": -40,
+            "vendor": "Other",
         }
         classes = {item.class_name for item in detect_wifi_anomalies(current, history)}
         self.assertIn("ssid_encryption_changed", classes)
@@ -84,19 +93,27 @@ class PassiveDetectorTests(unittest.TestCase):
         self.assertIn("vendor_property_mismatch", classes)
 
     def test_ble_services_and_randomized_identity_warning(self):
-        history = [{
-            "mac_address": "11:22:33:44:55:66", "location_id": "A",
-            "service_uuids": ["180D"], "rssi_dbm": -80,
-        }]
+        history = [
+            {
+                "mac_address": "11:22:33:44:55:66",
+                "location_id": "A",
+                "service_uuids": ["180D"],
+                "rssi_dbm": -80,
+            }
+        ]
         current = {
-            "mac_address": "11:22:33:44:55:66", "location_id": "B",
-            "service_uuids": ["180D", "180F"], "rssi_dbm": -50,
+            "mac_address": "11:22:33:44:55:66",
+            "location_id": "B",
+            "service_uuids": ["180D", "180F"],
+            "rssi_dbm": -50,
         }
         detections = detect_bluetooth_anomalies(current, history)
         classes = {item.class_name for item in detections}
         self.assertIn("new_service_uuid", classes)
         self.assertIn("ble_seen_multiple_locations", classes)
-        multi = next(item for item in detections if item.class_name == "ble_seen_multiple_locations")
+        multi = next(
+            item for item in detections if item.class_name == "ble_seen_multiple_locations"
+        )
         self.assertEqual(multi.evidence["certainty"], "cautious")
 
 
@@ -110,15 +127,15 @@ class OnlinePipelineTests(unittest.IsolatedAsyncioTestCase):
         try:
             frequencies = tuple(range(100_000_000, 100_010_000, 100))
             powers = tuple([-95.0] * len(frequencies))
-            accepted = pipeline.submit_nowait(SpectrumEnvelope(
-                frequencies, powers, 1, "2026-01-01T00:00:00Z", "mock"
-            ))
-            accepted_second = pipeline.submit_nowait(SpectrumEnvelope(
-                frequencies, powers, 2, "2026-01-01T00:00:01Z", "mock"
-            ))
-            dropped = pipeline.submit_nowait(SpectrumEnvelope(
-                frequencies, powers, 3, "2026-01-01T00:00:02Z", "mock"
-            ))
+            accepted = pipeline.submit_nowait(
+                SpectrumEnvelope(frequencies, powers, 1, "2026-01-01T00:00:00Z", "mock")
+            )
+            accepted_second = pipeline.submit_nowait(
+                SpectrumEnvelope(frequencies, powers, 2, "2026-01-01T00:00:01Z", "mock")
+            )
+            dropped = pipeline.submit_nowait(
+                SpectrumEnvelope(frequencies, powers, 3, "2026-01-01T00:00:02Z", "mock")
+            )
             self.assertTrue(accepted)
             self.assertTrue(accepted_second)
             self.assertFalse(dropped)

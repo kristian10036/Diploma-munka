@@ -8,7 +8,6 @@ import numpy as np
 
 from .preprocessing import SpectrogramPreprocessor
 
-
 RF_CLASSES = (
     "wifi_2_4g",
     "wifi_5g",
@@ -79,17 +78,41 @@ class RuleBasedRfClassifier:
         in_24g = 2.4e9 <= center_hz <= 2.5e9
         in_5g = 5.15e9 <= center_hz <= 5.9e9
         if peak_delta < 6.0:
-            return "noise", min(0.92, 0.60 + (6.0 - peak_delta) / 20.0), "no peak exceeds the robust noise floor by 6 dB"
+            return (
+                "noise",
+                min(0.92, 0.60 + (6.0 - peak_delta) / 20.0),
+                "no peak exceeds the robust noise floor by 6 dB",
+            )
         if in_24g and occupied < 0.08 and hopping > 0.08:
-            return "bluetooth", min(0.88, 0.62 + hopping), "narrow hopping peaks in the 2.4 GHz ISM band"
+            return (
+                "bluetooth",
+                min(0.88, 0.62 + hopping),
+                "narrow hopping peaks in the 2.4 GHz ISM band",
+            )
         if in_24g and occupied >= 0.08 and span_hz >= 15e6:
-            return "wifi_2_4g", min(0.90, 0.65 + occupied / 2.0), "wide occupied spectrum in the 2.4 GHz Wi-Fi band"
+            return (
+                "wifi_2_4g",
+                min(0.90, 0.65 + occupied / 2.0),
+                "wide occupied spectrum in the 2.4 GHz Wi-Fi band",
+            )
         if in_5g and occupied >= 0.08 and span_hz >= 15e6:
-            return "wifi_5g", min(0.90, 0.65 + occupied / 2.0), "wide occupied spectrum in the 5 GHz Wi-Fi band"
+            return (
+                "wifi_5g",
+                min(0.90, 0.65 + occupied / 2.0),
+                "wide occupied spectrum in the 5 GHz Wi-Fi band",
+            )
         if occupied < 0.08:
-            return "narrowband_unknown", min(0.86, 0.64 + peak_delta / 100.0), "strong signal with narrow occupied bandwidth"
+            return (
+                "narrowband_unknown",
+                min(0.86, 0.64 + peak_delta / 100.0),
+                "strong signal with narrow occupied bandwidth",
+            )
         if occupied >= 0.30:
-            return "wideband_unknown", min(0.86, 0.62 + occupied / 3.0), "broad occupied bandwidth without enough protocol evidence"
+            return (
+                "wideband_unknown",
+                min(0.86, 0.62 + occupied / 3.0),
+                "broad occupied bandwidth without enough protocol evidence",
+            )
         return "unknown", 0.51, "signal evidence is insufficient for a supported baseline class"
 
     @staticmethod

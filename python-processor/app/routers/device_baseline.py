@@ -37,8 +37,11 @@ def save_device_baseline(request: DeviceBaselineSaveRequest):
             )
         conn.commit()
     _write_audit_event(
-        "device_baseline.saved", entity_type="device_baseline", entity_id=None,
-        actor=request.operator or "operator", details=result,
+        "device_baseline.saved",
+        entity_type="device_baseline",
+        entity_id=None,
+        actor=request.operator or "operator",
+        details=result,
     )
     return result
 
@@ -47,11 +50,16 @@ def save_device_baseline(request: DeviceBaselineSaveRequest):
 def deactivate_device_baseline(request: DeviceBaselineDeactivateRequest):
     with get_db() as conn:
         with conn.cursor() as cur:
-            result = deactivate_baseline(cur, protocol=request.protocol, location_name=request.location_name)
+            result = deactivate_baseline(
+                cur, protocol=request.protocol, location_name=request.location_name
+            )
         conn.commit()
     _write_audit_event(
-        "device_baseline.deactivated", entity_type="device_baseline", entity_id=None,
-        actor="operator", details=result,
+        "device_baseline.deactivated",
+        entity_type="device_baseline",
+        entity_id=None,
+        actor="operator",
+        details=result,
     )
     return result
 

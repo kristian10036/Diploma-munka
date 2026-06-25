@@ -14,6 +14,7 @@ from app.runtime import DATABASE_URL
 
 logger = logging.getLogger(__name__)
 
+
 def get_db():
     if not DATABASE_URL:
         raise HTTPException(status_code=503, detail="DATABASE_URL nincs beallitva.")
@@ -22,7 +23,10 @@ def get_db():
             return psycopg.connect(DATABASE_URL, row_factory=dict_row)
         except Exception as exc:
             DB_CONNECTION_ERRORS.inc()
-            raise HTTPException(status_code=503, detail=f"Adatbazis kapcsolat sikertelen: {exc}") from exc
+            raise HTTPException(
+                status_code=503, detail=f"Adatbazis kapcsolat sikertelen: {exc}"
+            ) from exc
+
 
 def validated_optional_uuid(value: str | None, field_name: str) -> str | None:
     if value in (None, ""):
@@ -32,9 +36,15 @@ def validated_optional_uuid(value: str | None, field_name: str) -> str | None:
     except (ValueError, TypeError, AttributeError) as exc:
         raise HTTPException(status_code=422, detail=f"invalid_{field_name}") from exc
 
+
 def write_audit_event(
-    event_type: str, *, entity_type: str | None = None, entity_id: str | None = None,
-    success: bool = True, actor: str = "system", details: dict[str, Any] | None = None,
+    event_type: str,
+    *,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    success: bool = True,
+    actor: str = "system",
+    details: dict[str, Any] | None = None,
 ) -> None:
     """Best-effort operational audit. Audit failure never masks the main action."""
     if not DATABASE_URL:
@@ -51,8 +61,12 @@ def write_audit_event(
                     (actor, event_type, entity_type, entity_id, success, Jsonb(details or {})),
                 )
             conn.commit()
-    except Exception as exc:
-        logger.exception("audit_event_write_failed", extra={"structured": {"event_type": event_type, "entity_type": entity_type}})
+    except Exception:
+        logger.exception(
+            "audit_event_write_failed",
+            extra={"structured": {"event_type": event_type, "entity_type": entity_type}},
+        )
+
 
 # Temporary compatibility aliases while domain routers are migrated.
 _validated_optional_uuid = validated_optional_uuid

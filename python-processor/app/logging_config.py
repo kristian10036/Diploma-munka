@@ -18,8 +18,12 @@ _SECRET_MARKERS = ("password", "secret", "token", "authorization", "api_key", "a
 
 def _safe(value: Any) -> Any:
     if isinstance(value, dict):
-        return {key: "***" if any(marker in str(key).lower() for marker in _SECRET_MARKERS) else _safe(item)
-                for key, item in value.items()}
+        return {
+            key: "***"
+            if any(marker in str(key).lower() for marker in _SECRET_MARKERS)
+            else _safe(item)
+            for key, item in value.items()
+        }
     if isinstance(value, (list, tuple)):
         return [_safe(item) for item in value]
     text = str(value)
@@ -50,7 +54,10 @@ class JsonFormatter(logging.Formatter):
 class TextFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         base = super().format(record)
-        return f"{base} request_id={request_id_var.get()} session_id={session_id_var.get()} recording_id={recording_id_var.get()} source_id={source_id_var.get()}"
+        return (
+            f"{base} request_id={request_id_var.get()} session_id={session_id_var.get()} "
+            f"recording_id={recording_id_var.get()} source_id={source_id_var.get()}"
+        )
 
 
 def configure_logging() -> None:
@@ -72,13 +79,24 @@ def configure_logging() -> None:
         logger.propagate = True
 
 
-def bind_request_context(*, request_id: str, session_id: str | None = None,
-                         recording_id: str | None = None, source_id: str | None = None) -> list[tuple[contextvars.ContextVar[str], contextvars.Token[str]]]:
-    values = ((request_id_var, request_id), (session_id_var, session_id or "-"),
-              (recording_id_var, recording_id or "-"), (source_id_var, source_id or "-"))
+def bind_request_context(
+    *,
+    request_id: str,
+    session_id: str | None = None,
+    recording_id: str | None = None,
+    source_id: str | None = None,
+) -> list[tuple[contextvars.ContextVar[str], contextvars.Token[str]]]:
+    values = (
+        (request_id_var, request_id),
+        (session_id_var, session_id or "-"),
+        (recording_id_var, recording_id or "-"),
+        (source_id_var, source_id or "-"),
+    )
     return [(variable, variable.set(value)) for variable, value in values]
 
 
-def reset_request_context(tokens: list[tuple[contextvars.ContextVar[str], contextvars.Token[str]]]) -> None:
+def reset_request_context(
+    tokens: list[tuple[contextvars.ContextVar[str], contextvars.Token[str]]],
+) -> None:
     for variable, token in reversed(tokens):
         variable.reset(token)

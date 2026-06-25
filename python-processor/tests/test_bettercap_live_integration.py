@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 
 from app.config import BettercapSettings, KismetSettings
-from app.runtime import bluetooth_adapter_conflict_warning
 from app.routers.health_collectors import _merge_bluetooth_vendor_fields, _vendor_rank
+from app.runtime import bluetooth_adapter_conflict_warning
 from app.utils.parsing import normalize_bettercap_row
 
 
@@ -81,9 +81,14 @@ def test_merge_does_not_downgrade_when_new_poll_has_no_vendor():
 
 def test_bettercap_settings_defaults(monkeypatch):
     for key in (
-        "BETTERCAP_INTEGRATION_ENABLED", "BETTERCAP_API_URL", "BETTERCAP_USERNAME",
-        "BETTERCAP_PASSWORD", "BETTERCAP_API_TIMEOUT_SECONDS", "BETTERCAP_BLE_ENABLED",
-        "BETTERCAP_BLE_INTERFACE", "BETTERCAP_POLL_INTERVAL_SECONDS",
+        "BETTERCAP_INTEGRATION_ENABLED",
+        "BETTERCAP_API_URL",
+        "BETTERCAP_USERNAME",
+        "BETTERCAP_PASSWORD",
+        "BETTERCAP_API_TIMEOUT_SECONDS",
+        "BETTERCAP_BLE_ENABLED",
+        "BETTERCAP_BLE_INTERFACE",
+        "BETTERCAP_POLL_INTERVAL_SECONDS",
     ):
         monkeypatch.delenv(key, raising=False)
 

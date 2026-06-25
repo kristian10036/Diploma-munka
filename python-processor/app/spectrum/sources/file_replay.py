@@ -25,4 +25,3 @@ class FileReplaySpectrumSource(SpectrumSource):
         raise SpectrumSourceUnavailable(
             "File replay input format is not implemented; no spectrum frame is available."
         )
-

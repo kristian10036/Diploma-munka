@@ -85,9 +85,7 @@ class SpectrumSettings:
             end_mhz=end_mhz,
             point_count=point_count,
             demo_anomaly_enabled=_read_bool("DEMO_ANOMALY_ENABLED", True, warnings),
-            demo_anomaly_frequency_mhz=_read_float(
-                "DEMO_ANOMALY_FREQUENCY_MHZ", 2460.0, warnings
-            ),
+            demo_anomaly_frequency_mhz=_read_float("DEMO_ANOMALY_FREQUENCY_MHZ", 2460.0, warnings),
             demo_anomaly_level_dbm=_read_float("DEMO_ANOMALY_LEVEL_DBM", -35.0, warnings),
             aaronia_rtsa_url=os.getenv(
                 "AARONIA_RTSA_URL", "http://host.docker.internal:54664"
@@ -152,10 +150,14 @@ class KismetSettings:
         alerts_endpoint = os.getenv("KISMET_ALERTS_ENDPOINT", "/alerts/all_alerts.json").strip()
         if not alerts_endpoint.startswith("/"):
             alerts_endpoint = "/" + alerts_endpoint
-        bluetooth_interface = os.getenv("KISMET_BLUETOOTH_INTERFACE", "hci0").strip().lower() or "hci0"
+        bluetooth_interface = (
+            os.getenv("KISMET_BLUETOOTH_INTERFACE", "hci0").strip().lower() or "hci0"
+        )
         return cls(
             enabled=_read_bool("KISMET_INTEGRATION_ENABLED", False, warnings),
-            api_url=os.getenv("KISMET_API_URL", "http://host.docker.internal:2501").strip().rstrip("/"),
+            api_url=os.getenv("KISMET_API_URL", "http://host.docker.internal:2501")
+            .strip()
+            .rstrip("/"),
             api_key=os.getenv("KISMET_API_KEY", "").strip(),
             username=os.getenv("KISMET_HTTPD_USERNAME", "").strip(),
             password=os.getenv("KISMET_HTTPD_PASSWORD", "").strip(),
@@ -185,7 +187,9 @@ class DeviceBaselineSettings:
             wifi_grace = 180.0
         bluetooth_grace = _read_float("BLUETOOTH_BASELINE_MISSING_GRACE_SECONDS", 300.0, warnings)
         if bluetooth_grace < 0:
-            warnings.append("BLUETOOTH_BASELINE_MISSING_GRACE_SECONDS must be non-negative; using 300.")
+            warnings.append(
+                "BLUETOOTH_BASELINE_MISSING_GRACE_SECONDS must be non-negative; using 300."
+            )
             bluetooth_grace = 300.0
         return cls(
             wifi_missing_grace_seconds=wifi_grace,
@@ -220,7 +224,9 @@ class BettercapSettings:
         ble_interface = os.getenv("BETTERCAP_BLE_INTERFACE", "hci1").strip().lower() or "hci1"
         return cls(
             enabled=_read_bool("BETTERCAP_INTEGRATION_ENABLED", False, warnings),
-            api_url=os.getenv("BETTERCAP_API_URL", "http://host.docker.internal:8081").strip().rstrip("/"),
+            api_url=os.getenv("BETTERCAP_API_URL", "http://host.docker.internal:8081")
+            .strip()
+            .rstrip("/"),
             username=os.getenv("BETTERCAP_USERNAME", "user").strip() or "user",
             password=os.getenv("BETTERCAP_PASSWORD", "pass").strip() or "pass",
             timeout_seconds=timeout_seconds,

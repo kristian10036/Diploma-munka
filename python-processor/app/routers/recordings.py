@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.metrics import RECORDING_DISK_FREE_BYTES, RECORDING_LOW_DISK
 from app.db import get_db
+from app.metrics import RECORDING_DISK_FREE_BYTES, RECORDING_LOW_DISK
 from app.runtime import RECORDING_CATALOG, RECORDING_SETTINGS, RECORDING_STORAGE
 
 router = APIRouter(prefix="/api/recordings", tags=["recordings"])
@@ -57,7 +57,9 @@ def get_recording_catalog(
     try:
         items = RECORDING_CATALOG.list(verify_checksums=verify_checksums, limit=limit)
     except OSError as exc:
-        raise HTTPException(status_code=503, detail=f"recording_storage_unavailable:{type(exc).__name__}") from exc
+        raise HTTPException(
+            status_code=503, detail=f"recording_storage_unavailable:{type(exc).__name__}"
+        ) from exc
     counts: dict[str, int] = {}
     for item in items:
         key = str(item.get("recording_type") or "unknown")
@@ -74,7 +76,9 @@ def get_recording_retention_plan():
 def get_recording_orphan_audit():
     """Compare filesystem spectrum recordings with DB metadata without deleting anything."""
     filesystem = RECORDING_CATALOG.list(verify_checksums=False, limit=1000)
-    filesystem_ids = {str(item.get("recording_id")) for item in filesystem if item.get("recording_id")}
+    filesystem_ids = {
+        str(item.get("recording_id")) for item in filesystem if item.get("recording_id")
+    }
     try:
         with get_db() as conn:
             with conn.cursor() as cur:

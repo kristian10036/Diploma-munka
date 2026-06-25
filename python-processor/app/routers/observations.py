@@ -14,17 +14,54 @@ from app.utils.parsing import parse_mac
 router = APIRouter()
 
 _BLUETOOTH_OBSERVATION_FIELDS = [
-    "id", "measurement_session_id", "location_name", "source_name", "source_type", "observed_at",
-    "mac", "device_name", "rssi_dbm", "vendor", "service_uuids", "address_type", "bluetooth_type",
-    "vendor_resolution_method", "vendor_confidence", "bluetooth_company_id", "manufacturer_data_hash",
-    "stable_identity", "identity_confidence", "observation_count", "raw_payload", "created_at",
+    "id",
+    "measurement_session_id",
+    "location_name",
+    "source_name",
+    "source_type",
+    "observed_at",
+    "mac",
+    "device_name",
+    "rssi_dbm",
+    "vendor",
+    "service_uuids",
+    "address_type",
+    "bluetooth_type",
+    "vendor_resolution_method",
+    "vendor_confidence",
+    "bluetooth_company_id",
+    "manufacturer_data_hash",
+    "stable_identity",
+    "identity_confidence",
+    "observation_count",
+    "raw_payload",
+    "created_at",
 ]
 _WIFI_OBSERVATION_FIELDS = [
-    "id", "measurement_session_id", "location_name", "source_name", "source_type", "observed_at",
-    "bssid", "ssid", "channel", "frequency_hz", "rssi_dbm", "vendor", "signal_dbm", "noise_dbm",
-    "encryption", "device_type", "stable_identity", "identity_confidence",
-    "packet_count", "observation_count", "raw_payload", "created_at",
+    "id",
+    "measurement_session_id",
+    "location_name",
+    "source_name",
+    "source_type",
+    "observed_at",
+    "bssid",
+    "ssid",
+    "channel",
+    "frequency_hz",
+    "rssi_dbm",
+    "vendor",
+    "signal_dbm",
+    "noise_dbm",
+    "encryption",
+    "device_type",
+    "stable_identity",
+    "identity_confidence",
+    "packet_count",
+    "observation_count",
+    "raw_payload",
+    "created_at",
 ]
+
 
 @router.get("/api/bluetooth/devices")
 def list_bluetooth_devices(
@@ -78,18 +115,27 @@ def list_bluetooth_devices(
         SELECT d.id, d.mac_address AS mac,
                COALESCE(stats.latest_device_name, d.device_name) AS device_name,
                CASE
-                 WHEN COALESCE(stats.latest_vendor_resolution_method, d.vendor_resolution_method, 'unknown') = 'unknown'
+                 WHEN COALESCE(
+                   stats.latest_vendor_resolution_method, d.vendor_resolution_method, 'unknown'
+                 ) = 'unknown'
                  THEN NULL
                  ELSE COALESCE(stats.latest_vendor, d.vendor)
                END AS vendor,
-               COALESCE(stats.latest_vendor_resolution_method, d.vendor_resolution_method, 'unknown') AS vendor_resolution_method,
-               COALESCE(stats.latest_vendor_confidence, d.vendor_confidence, 'unknown') AS vendor_confidence,
-               COALESCE(stats.latest_bluetooth_company_id, d.bluetooth_company_id) AS bluetooth_company_id,
-               COALESCE(stats.latest_manufacturer_data_hash, d.manufacturer_data_hash) AS manufacturer_data_hash,
+               COALESCE(
+                 stats.latest_vendor_resolution_method, d.vendor_resolution_method, 'unknown'
+               ) AS vendor_resolution_method,
+               COALESCE(stats.latest_vendor_confidence, d.vendor_confidence, 'unknown')
+                 AS vendor_confidence,
+               COALESCE(stats.latest_bluetooth_company_id, d.bluetooth_company_id)
+                 AS bluetooth_company_id,
+               COALESCE(stats.latest_manufacturer_data_hash, d.manufacturer_data_hash)
+                 AS manufacturer_data_hash,
                COALESCE(stats.latest_address_type, d.address_type) AS address_type,
                COALESCE(stats.latest_bluetooth_type, d.bluetooth_type) AS bluetooth_type,
-               COALESCE(stats.latest_stable_identity, d.stable_identity, d.mac_address) AS stable_identity,
-               COALESCE(stats.latest_identity_confidence, d.identity_confidence, 'unknown') AS identity_confidence,
+               COALESCE(stats.latest_stable_identity, d.stable_identity, d.mac_address)
+                 AS stable_identity,
+               COALESCE(stats.latest_identity_confidence, d.identity_confidence, 'unknown')
+                 AS identity_confidence,
                'unknown'::text AS baseline_status,
                'unknown'::text AS risk_level,
                NULL::text AS risk_summary,
@@ -120,27 +166,37 @@ def list_bluetooth_devices(
                  MAX(o.rssi_dbm) AS rssi_max_dbm,
                  AVG(o.rssi_dbm) AS rssi_avg_dbm,
                  (ARRAY_AGG(o.device_name
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_device_name,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_device_name,
                  (ARRAY_AGG(o.vendor
                             ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_vendor,
                  (ARRAY_AGG(o.vendor_resolution_method
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_vendor_resolution_method,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_vendor_resolution_method,
                  (ARRAY_AGG(o.vendor_confidence
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_vendor_confidence,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_vendor_confidence,
                  (ARRAY_AGG(o.bluetooth_company_id
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_bluetooth_company_id,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_bluetooth_company_id,
                  (ARRAY_AGG(o.manufacturer_data_hash
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_manufacturer_data_hash,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_manufacturer_data_hash,
                  (ARRAY_AGG(o.service_uuids
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_service_uuids,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_service_uuids,
                  (ARRAY_AGG(o.address_type
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_address_type,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_address_type,
                  (ARRAY_AGG(o.bluetooth_type
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_bluetooth_type,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_bluetooth_type,
                  (ARRAY_AGG(o.stable_identity
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_stable_identity,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_stable_identity,
                  (ARRAY_AGG(o.identity_confidence
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_identity_confidence
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_identity_confidence
           FROM bluetooth_observations o
           WHERE 
         """
@@ -157,7 +213,9 @@ def list_bluetooth_devices(
             cur.execute(query, parameters)
             items = list(cur.fetchall())
             if reference_set_id:
-                reference_result = annotate_devices(cur, items=items, reference_set_id=reference_set_id, protocol="bluetooth")
+                reference_result = annotate_devices(
+                    cur, items=items, reference_set_id=reference_set_id, protocol="bluetooth"
+                )
             else:
                 reference_result = stamp_not_compared(items)
     return {"items": items, "limit": safe_limit, **reference_result}
@@ -199,7 +257,8 @@ def list_bluetooth_observations(
                COALESCE(o.source_type, 'bluetooth') AS source_type,
                COALESCE(o.observed_at, o.time) AS observed_at,
                o.mac_address AS mac, o.device_name, o.rssi_dbm,
-               CASE WHEN COALESCE(o.vendor_resolution_method, 'unknown') = 'unknown' THEN NULL ELSE o.vendor END AS vendor,
+               CASE WHEN COALESCE(o.vendor_resolution_method, 'unknown') = 'unknown'
+                    THEN NULL ELSE o.vendor END AS vendor,
                o.service_uuids, o.address_type, o.bluetooth_type,
                o.vendor_resolution_method, o.vendor_confidence,
                o.bluetooth_company_id, o.manufacturer_data_hash,
@@ -254,7 +313,8 @@ def export_bluetooth_observations(
                COALESCE(o.source_type, 'bluetooth') AS source_type,
                COALESCE(o.observed_at, o.time) AS observed_at,
                o.mac_address AS mac, o.device_name, o.rssi_dbm,
-               CASE WHEN COALESCE(o.vendor_resolution_method, 'unknown') = 'unknown' THEN NULL ELSE o.vendor END AS vendor,
+               CASE WHEN COALESCE(o.vendor_resolution_method, 'unknown') = 'unknown'
+                    THEN NULL ELSE o.vendor END AS vendor,
                o.service_uuids, o.address_type, o.bluetooth_type,
                o.vendor_resolution_method, o.vendor_confidence,
                o.bluetooth_company_id, o.manufacturer_data_hash,
@@ -314,7 +374,7 @@ def get_bluetooth_rssi_history(
                        o.measurement_session_id
                 FROM bluetooth_observations o
                 LEFT JOIN locations l ON l.id = o.location_id
-                WHERE {' AND '.join(conditions)}
+                WHERE {" AND ".join(conditions)}
                 ORDER BY COALESCE(o.observed_at, o.time)
                 LIMIT 10000
                 """,
@@ -378,8 +438,10 @@ def list_wifi_devices(
                d.vendor,
                COALESCE(stats.latest_encryption, d.encryption) AS encryption,
                COALESCE(stats.latest_device_type, d.device_type, 'unknown') AS device_type,
-               COALESCE(stats.latest_stable_identity, d.stable_identity, d.bssid) AS stable_identity,
-               COALESCE(stats.latest_identity_confidence, d.identity_confidence, 'unknown') AS identity_confidence,
+               COALESCE(stats.latest_stable_identity, d.stable_identity, d.bssid)
+                 AS stable_identity,
+               COALESCE(stats.latest_identity_confidence, d.identity_confidence, 'unknown')
+                 AS identity_confidence,
                'unknown'::text AS baseline_status,
                COALESCE(d.management_frame_counts, '{}'::jsonb) AS management_frame_summary,
                'unknown'::text AS risk_level,
@@ -404,9 +466,11 @@ def list_wifi_devices(
                  MIN(COALESCE(o.observed_at, o.time)) AS first_observed_at,
                  MAX(COALESCE(o.observed_at, o.time)) AS latest_observed_at,
                  (ARRAY_AGG(COALESCE(o.signal_dbm, o.rssi_dbm)
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_signal_dbm,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_signal_dbm,
                  (ARRAY_AGG(COALESCE(o.signal_dbm, o.rssi_dbm)
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[2] AS previous_signal_dbm,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[2]
+                   AS previous_signal_dbm,
                  MIN(COALESCE(o.signal_dbm, o.rssi_dbm)) AS rssi_min_dbm,
                  MAX(COALESCE(o.signal_dbm, o.rssi_dbm)) AS rssi_max_dbm,
                  AVG(COALESCE(o.signal_dbm, o.rssi_dbm)) AS rssi_avg_dbm,
@@ -415,15 +479,19 @@ def list_wifi_devices(
                  (ARRAY_AGG(o.channel
                             ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_channel,
                  (ARRAY_AGG(o.frequency_hz
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_frequency_hz,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_frequency_hz,
                  (ARRAY_AGG(o.encryption
                             ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_encryption,
                  (ARRAY_AGG(o.device_type
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_device_type,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_device_type,
                  (ARRAY_AGG(o.stable_identity
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_stable_identity,
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_stable_identity,
                  (ARRAY_AGG(o.identity_confidence
-                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_identity_confidence
+                            ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_identity_confidence
           FROM wifi_observations o
           WHERE 
         """
@@ -440,7 +508,9 @@ def list_wifi_devices(
             cur.execute(query, parameters)
             items = list(cur.fetchall())
             if reference_set_id:
-                reference_result = annotate_devices(cur, items=items, reference_set_id=reference_set_id, protocol="wifi")
+                reference_result = annotate_devices(
+                    cur, items=items, reference_set_id=reference_set_id, protocol="wifi"
+                )
             else:
                 reference_result = stamp_not_compared(items)
     return {"items": items, "limit": safe_limit, **reference_result}

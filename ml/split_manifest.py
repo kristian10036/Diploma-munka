@@ -41,9 +41,7 @@ def main() -> None:
         "schema_version": 1,
         "seed": args.seed,
         "split_unit": "recording_or_session",
-        "partitions": {
-            name: [item.item_id for item in values] for name, values in split.items()
-        },
+        "partitions": {name: [item.item_id for item in values] for name, values in split.items()},
     }
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")

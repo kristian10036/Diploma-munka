@@ -17,8 +17,9 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
-def _error_response(*, request: Request, status_code: int, code: str, message: str,
-                    details=None, headers=None) -> JSONResponse:
+def _error_response(
+    *, request: Request, status_code: int, code: str, message: str, details=None, headers=None
+) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None) or request.headers.get("x-request-id")
     payload = {
         "detail": message,
@@ -45,8 +46,8 @@ def create_application() -> FastAPI:
         legacy_references,
         markers_known,
         observations,
-        reference_sets,
         recordings,
+        reference_sets,
         rf_agent,
         sessions_imports,
         spectrum_actions,
@@ -54,7 +55,8 @@ def create_application() -> FastAPI:
         versioned_references,
     )
     from app.routers.monitoring import router as monitoring_router
-    from app.streaming import router as streaming_router, shutdown_event, startup_event
+    from app.streaming import router as streaming_router
+    from app.streaming import shutdown_event, startup_event
 
     app = FastAPI(title="DM RF/TSCM monitoring platform", version="2.0.0")
 
@@ -101,18 +103,39 @@ def create_application() -> FastAPI:
                     declared_length = int(content_length)
                 except ValueError:
                     status_code = 400
-                    return _error_response(request=request, status_code=400, code="invalid_content_length", message="invalid_content_length")
+                    return _error_response(
+                        request=request,
+                        status_code=400,
+                        code="invalid_content_length",
+                        message="invalid_content_length",
+                    )
                 if declared_length < 0:
                     status_code = 400
-                    return _error_response(request=request, status_code=400, code="invalid_content_length", message="invalid_content_length")
+                    return _error_response(
+                        request=request,
+                        status_code=400,
+                        code="invalid_content_length",
+                        message="invalid_content_length",
+                    )
                 if declared_length > SETTINGS.max_request_bytes:
                     status_code = 413
-                    return _error_response(request=request, status_code=413, code="request_body_too_large", message="request_body_too_large")
+                    return _error_response(
+                        request=request,
+                        status_code=413,
+                        code="request_body_too_large",
+                        message="request_body_too_large",
+                    )
             try:
                 auth = authorize_request(request)
             except HTTPException as exc:
                 status_code = exc.status_code
-                return _error_response(request=request, status_code=exc.status_code, code=str(exc.detail), message=str(exc.detail), headers=exc.headers)
+                return _error_response(
+                    request=request,
+                    status_code=exc.status_code,
+                    code=str(exc.detail),
+                    message=str(exc.detail),
+                    headers=exc.headers,
+                )
             request.state.auth = auth
             response = await call_next(request)
             status_code = response.status_code
@@ -121,31 +144,67 @@ def create_application() -> FastAPI:
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["Referrer-Policy"] = "no-referrer"
             response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-            response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api/") else response.headers.get("Cache-Control", "no-cache")
+            response.headers["Cache-Control"] = (
+                "no-store"
+                if request.url.path.startswith("/api/")
+                else response.headers.get("Cache-Control", "no-cache")
+            )
             return response
         except Exception:
-            logger.exception("request_failed", extra={"structured": {"method": request.method, "path": request.url.path}})
+            logger.exception(
+                "request_failed",
+                extra={"structured": {"method": request.method, "path": request.url.path}},
+            )
             raise
         finally:
             duration = time.perf_counter() - started
-            logger.info("request_complete", extra={"structured": {
-                "method": request.method, "path": request.url.path, "status": status_code,
-                "duration_seconds": round(duration, 6), "role": auth.get("role")
-            }})
-            if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
+            logger.info(
+                "request_complete",
+                extra={
+                    "structured": {
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status": status_code,
+                        "duration_seconds": round(duration, 6),
+                        "role": auth.get("role"),
+                    }
+                },
+            )
+            if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith(
+                "/api/"
+            ):
                 write_audit_event(
-                    "api.write", entity_type="http_request", actor=auth.get("actor", "unknown"),
+                    "api.write",
+                    entity_type="http_request",
+                    actor=auth.get("actor", "unknown"),
                     success=200 <= status_code < 400,
-                    details={"method": request.method, "path": request.url.path, "status": status_code, "request_id": request_id},
+                    details={
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status": status_code,
+                        "request_id": request_id,
+                    },
                 )
             reset_request_context(tokens)
 
     install_metrics(app)
     for router in (
-        health_collectors.router, sessions_imports.router, observations.router, anomalies_alerts.router,
-        legacy_references.router, versioned_references.router, reference_sets.router, spectrum_actions.router,
-        markers_known.router, recordings.router, rf_agent.router, system_rag.router, monitoring_router, streaming_router,
-        data_retention.router, device_baseline.router,
+        health_collectors.router,
+        sessions_imports.router,
+        observations.router,
+        anomalies_alerts.router,
+        legacy_references.router,
+        versioned_references.router,
+        reference_sets.router,
+        spectrum_actions.router,
+        markers_known.router,
+        recordings.router,
+        rf_agent.router,
+        system_rag.router,
+        monitoring_router,
+        streaming_router,
+        data_retention.router,
+        device_baseline.router,
     ):
         app.include_router(router)
     if hasattr(app, "add_event_handler"):

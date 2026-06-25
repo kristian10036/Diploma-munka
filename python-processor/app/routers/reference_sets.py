@@ -29,20 +29,40 @@ MAX_REFERENCE_POINTS = 65_536
 def _clean_key(value: str) -> str:
     key = value.strip()
     if not REFERENCE_KEY_PATTERN.fullmatch(key):
-        raise HTTPException(status_code=422, detail={"code": "invalid_reference_key", "message": "Érvénytelen referenciaazonosító."})
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_reference_key", "message": "Érvénytelen referenciaazonosító."},
+        )
     return key
 
 
 def _normalize_points(points: list[Any]) -> list[tuple[int, float]]:
     if not points or len(points) > MAX_REFERENCE_POINTS:
-        raise HTTPException(status_code=422, detail={"code": "invalid_spectrum_points", "message": "1 és 65536 közötti spektrumpont szükséges."})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_spectrum_points",
+                "message": "1 és 65536 közötti spektrumpont szükséges.",
+            },
+        )
     normalized: list[tuple[int, float]] = []
     previous = 0
     for point in points:
-        frequency = int(point.frequency_hz if hasattr(point, "frequency_hz") else point["frequency_hz"])
+        frequency = int(
+            point.frequency_hz if hasattr(point, "frequency_hz") else point["frequency_hz"]
+        )
         power = float(point.power_dbm if hasattr(point, "power_dbm") else point["power_dbm"])
         if frequency <= 0 or frequency <= previous or not math.isfinite(power):
-            raise HTTPException(status_code=422, detail={"code": "invalid_spectrum_points", "message": "A frekvenciák pozitívak és szigorúan növekvők legyenek; a dBm érték legyen véges."})
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "invalid_spectrum_points",
+                    "message": (
+                        "A frekvenciák pozitívak és szigorúan növekvők legyenek; "
+                        "a dBm érték legyen véges."
+                    ),
+                },
+            )
         normalized.append((frequency, power))
         previous = frequency
     return normalized
@@ -55,7 +75,9 @@ def _checksum(points: list[tuple[int, float]]) -> str:
 
 def _step_frequency(points: list[tuple[int, float]]) -> int | None:
     frequencies = [point[0] for point in points]
-    differences = {frequencies[index] - frequencies[index - 1] for index in range(1, len(frequencies))}
+    differences = {
+        frequencies[index] - frequencies[index - 1] for index in range(1, len(frequencies))
+    }
     return next(iter(differences)) if len(differences) == 1 else None
 
 
@@ -69,12 +91,14 @@ def _baseline_grace(protocol: str) -> float:
 
 def _reference_set_components(cur, reference_set_id: str) -> dict[str, Any]:
     cur.execute(
-        "SELECT id, reference_kind, point_count, is_active FROM spectrum_references WHERE reference_set_id=%s ORDER BY version DESC",
+        "SELECT id, reference_kind, point_count, is_active FROM spectrum_references "
+        "WHERE reference_set_id=%s ORDER BY version DESC",
         (reference_set_id,),
     )
     spectrum = list(cur.fetchall())
     cur.execute(
-        "SELECT protocol, count(*) AS count FROM device_baselines WHERE reference_set_id=%s GROUP BY protocol",
+        "SELECT protocol, count(*) AS count FROM device_baselines "
+        "WHERE reference_set_id=%s GROUP BY protocol",
         (reference_set_id,),
     )
     baselines = {row["protocol"]: row["count"] for row in cur.fetchall()}
@@ -106,7 +130,9 @@ def list_reference_sets(
     parameters.append(safe_limit)
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute(f"SELECT * FROM reference_sets{where} ORDER BY updated_at DESC LIMIT %s", parameters)
+            cur.execute(
+                f"SELECT * FROM reference_sets{where} ORDER BY updated_at DESC LIMIT %s", parameters
+            )
             items = list(cur.fetchall())
     return {"items": items, "count": len(items)}
 
@@ -131,15 +157,17 @@ def get_reference_set_spectrum(reference_set_id: str):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id FROM spectrum_references WHERE reference_set_id=%s ORDER BY is_active DESC, version DESC LIMIT 1",
+                "SELECT id FROM spectrum_references WHERE reference_set_id=%s "
+                "ORDER BY is_active DESC, version DESC LIMIT 1",
                 (identifier,),
             )
             reference = cur.fetchone()
             if not reference:
                 raise HTTPException(status_code=404, detail="spectrum_reference_not_found")
             cur.execute(
-                "SELECT COALESCE(actual_rf_frequency_hz, measured_frequency_hz) AS frequency_hz, power_dbm "
-                "FROM reference_spectrum_points WHERE reference_id=%s ORDER BY COALESCE(actual_rf_frequency_hz, measured_frequency_hz)",
+                "SELECT COALESCE(actual_rf_frequency_hz, measured_frequency_hz) AS frequency_hz, "
+                "power_dbm FROM reference_spectrum_points WHERE reference_id=%s "
+                "ORDER BY COALESCE(actual_rf_frequency_hz, measured_frequency_hz)",
                 (str(reference["id"]),),
             )
             points = list(cur.fetchall())
@@ -151,13 +179,23 @@ def capture_reference_set(request: ReferenceSetCaptureRequest):
     key = _clean_key(request.reference_key)
     kind = request.spectrum_reference_kind.strip().casefold()
     if kind not in SPECTRUM_KINDS:
-        raise HTTPException(status_code=422, detail={"code": "invalid_spectrum_reference_kind", "message": "snapshot vagy max_hold támogatott."})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_spectrum_reference_kind",
+                "message": "snapshot vagy max_hold támogatott.",
+            },
+        )
     location_name = request.location_name.strip()
     points = _normalize_points(request.spectrum_points)
     now = datetime.now(timezone.utc)
     checksum = _checksum(points)
     step = _step_frequency(points)
-    session_id = validated_optional_uuid(request.measurement_session_id, "measurement_session_id") if request.measurement_session_id else None
+    session_id = (
+        validated_optional_uuid(request.measurement_session_id, "measurement_session_id")
+        if request.measurement_session_id
+        else None
+    )
     metadata = dict(request.spectrum_metadata or {})
     metadata.update({"layer_type": "reference", "reference_kind": kind})
 
@@ -169,7 +207,11 @@ def capture_reference_set(request: ReferenceSetCaptureRequest):
                 if not cur.fetchone():
                     raise HTTPException(status_code=404, detail="measurement_session_not_found")
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (key,))
-            cur.execute("SELECT COALESCE(MAX(version), 0) + 1 AS version FROM reference_sets WHERE reference_key=%s", (key,))
+            cur.execute(
+                "SELECT COALESCE(MAX(version), 0) + 1 AS version FROM reference_sets "
+                "WHERE reference_key=%s",
+                (key,),
+            )
             version = cur.fetchone()["version"]
             if request.activate:
                 cur.execute(
@@ -187,9 +229,18 @@ def capture_reference_set(request: ReferenceSetCaptureRequest):
                 RETURNING *
                 """,
                 (
-                    key, version, request.name.strip(), location_id, location_name,
-                    session_id, now, now, request.activate, request.operator_name,
-                    request.notes, Jsonb({"spectrum_reference_kind": kind}),
+                    key,
+                    version,
+                    request.name.strip(),
+                    location_id,
+                    location_name,
+                    session_id,
+                    now,
+                    now,
+                    request.activate,
+                    request.operator_name,
+                    request.notes,
+                    Jsonb({"spectrum_reference_kind": kind}),
                 ),
             )
             reference_set = cur.fetchone()
@@ -207,11 +258,27 @@ def capture_reference_set(request: ReferenceSetCaptureRequest):
                 RETURNING *
                 """,
                 (
-                    key, version, location_id, location_name, metadata.get("device_name"),
-                    points[0][0], points[-1][0], step, now, request.operator_name,
-                    request.notes, checksum, request.activate, len(points), Jsonb(metadata),
-                    reference_set["id"], session_id, kind, metadata.get("window_start"),
-                    metadata.get("window_end"), metadata.get("frame_count"),
+                    key,
+                    version,
+                    location_id,
+                    location_name,
+                    metadata.get("device_name"),
+                    points[0][0],
+                    points[-1][0],
+                    step,
+                    now,
+                    request.operator_name,
+                    request.notes,
+                    checksum,
+                    request.activate,
+                    len(points),
+                    Jsonb(metadata),
+                    reference_set["id"],
+                    session_id,
+                    kind,
+                    metadata.get("window_start"),
+                    metadata.get("window_end"),
+                    metadata.get("frame_count"),
                 ),
             )
             spectrum_reference = cur.fetchone()
@@ -224,15 +291,27 @@ def capture_reference_set(request: ReferenceSetCaptureRequest):
                 """,
                 [
                     (
-                        now, str(spectrum_reference["id"]), location_id, location_name,
-                        metadata.get("device_name"), "reference_set_capture", frequency, frequency,
-                        power, Jsonb({"reference_set_id": str(reference_set["id"]), "reference_kind": kind}),
+                        now,
+                        str(spectrum_reference["id"]),
+                        location_id,
+                        location_name,
+                        metadata.get("device_name"),
+                        "reference_set_capture",
+                        frequency,
+                        frequency,
+                        power,
+                        Jsonb(
+                            {"reference_set_id": str(reference_set["id"]), "reference_kind": kind}
+                        ),
                     )
                     for frequency, power in points
                 ],
             )
             baseline_results: dict[str, Any] = {}
-            for protocol, include in (("wifi", request.include_wifi), ("bluetooth", request.include_bluetooth)):
+            for protocol, include in (
+                ("wifi", request.include_wifi),
+                ("bluetooth", request.include_bluetooth),
+            ):
                 if not include:
                     continue
                 try:
@@ -248,12 +327,22 @@ def capture_reference_set(request: ReferenceSetCaptureRequest):
                     )
                 except HTTPException as exc:
                     if exc.status_code == 409:
-                        baseline_results[protocol] = {"protocol": protocol, "saved_entries": 0, "warning": "no_session_observations"}
+                        baseline_results[protocol] = {
+                            "protocol": protocol,
+                            "saved_entries": 0,
+                            "warning": "no_session_observations",
+                        }
                     else:
                         raise
         conn.commit()
-    write_audit_event("reference_set.captured", entity_type="reference_set", entity_id=str(reference_set["id"]))
-    return {"reference_set": reference_set, "spectrum_reference": spectrum_reference, "baselines": baseline_results}
+    write_audit_event(
+        "reference_set.captured", entity_type="reference_set", entity_id=str(reference_set["id"])
+    )
+    return {
+        "reference_set": reference_set,
+        "spectrum_reference": spectrum_reference,
+        "baselines": baseline_results,
+    }
 
 
 @router.post("/api/reference-sets/{reference_set_id}/activate")
@@ -261,7 +350,10 @@ def activate_reference_set(reference_set_id: str):
     identifier = validated_optional_uuid(reference_set_id, "reference_set_id")
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT location_name FROM reference_sets WHERE id=%s AND archived_at IS NULL", (identifier,))
+            cur.execute(
+                "SELECT location_name FROM reference_sets WHERE id=%s AND archived_at IS NULL",
+                (identifier,),
+            )
             found = cur.fetchone()
             if not found:
                 raise HTTPException(status_code=404, detail="reference_set_not_found")
@@ -270,7 +362,12 @@ def activate_reference_set(reference_set_id: str):
                 "WHERE lower(location_name)=lower(%s) AND archived_at IS NULL",
                 (identifier, found["location_name"]),
             )
-            cur.execute("UPDATE spectrum_references SET is_active=(reference_set_id=%s), updated_at=now() WHERE reference_set_id IN (SELECT id FROM reference_sets WHERE lower(location_name)=lower(%s))", (identifier, found["location_name"]))
+            cur.execute(
+                "UPDATE spectrum_references SET is_active=(reference_set_id=%s), updated_at=now() "
+                "WHERE reference_set_id IN "
+                "(SELECT id FROM reference_sets WHERE lower(location_name)=lower(%s))",
+                (identifier, found["location_name"]),
+            )
             cur.execute("SELECT * FROM reference_sets WHERE id=%s", (identifier,))
             row = cur.fetchone()
         conn.commit()
@@ -282,10 +379,18 @@ def deactivate_reference_set(reference_set_id: str):
     identifier = validated_optional_uuid(reference_set_id, "reference_set_id")
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE reference_sets SET is_active=false, updated_at=now() WHERE id=%s RETURNING *", (identifier,))
+            cur.execute(
+                "UPDATE reference_sets SET is_active=false, updated_at=now() "
+                "WHERE id=%s RETURNING *",
+                (identifier,),
+            )
             row = cur.fetchone()
             if row:
-                cur.execute("UPDATE spectrum_references SET is_active=false, updated_at=now() WHERE reference_set_id=%s", (identifier,))
+                cur.execute(
+                    "UPDATE spectrum_references SET is_active=false, updated_at=now() "
+                    "WHERE reference_set_id=%s",
+                    (identifier,),
+                )
         conn.commit()
     if not row:
         raise HTTPException(status_code=404, detail="reference_set_not_found")
@@ -297,20 +402,32 @@ def _export_payload(cur, reference_set_id: str) -> dict[str, Any]:
     reference_set = cur.fetchone()
     if not reference_set:
         raise HTTPException(status_code=404, detail="reference_set_not_found")
-    cur.execute("SELECT * FROM spectrum_references WHERE reference_set_id=%s ORDER BY version DESC LIMIT 1", (reference_set_id,))
+    cur.execute(
+        "SELECT * FROM spectrum_references WHERE reference_set_id=%s ORDER BY version DESC LIMIT 1",
+        (reference_set_id,),
+    )
     spectrum_reference = cur.fetchone()
     spectrum_points: list[Any] = []
     if spectrum_reference:
         cur.execute(
-            "SELECT COALESCE(actual_rf_frequency_hz, measured_frequency_hz) AS frequency_hz, power_dbm "
-            "FROM reference_spectrum_points WHERE reference_id=%s ORDER BY COALESCE(actual_rf_frequency_hz, measured_frequency_hz)",
+            "SELECT COALESCE(actual_rf_frequency_hz, measured_frequency_hz) AS frequency_hz, "
+            "power_dbm FROM reference_spectrum_points WHERE reference_id=%s "
+            "ORDER BY COALESCE(actual_rf_frequency_hz, measured_frequency_hz)",
             (str(spectrum_reference["id"]),),
         )
         spectrum_points = list(cur.fetchall())
-    cur.execute("SELECT * FROM device_baselines WHERE reference_set_id=%s ORDER BY protocol, stable_identity", (reference_set_id,))
+    cur.execute(
+        "SELECT * FROM device_baselines WHERE reference_set_id=%s "
+        "ORDER BY protocol, stable_identity",
+        (reference_set_id,),
+    )
     baselines = list(cur.fetchall())
     return {
-        "manifest": {"schema": "reference_set_export", "version": 1, "exported_at": datetime.now(timezone.utc).isoformat()},
+        "manifest": {
+            "schema": "reference_set_export",
+            "version": 1,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+        },
         "reference_set": reference_set,
         "spectrum_reference": spectrum_reference,
         "spectrum_points": spectrum_points,
@@ -322,13 +439,27 @@ def _export_payload(cur, reference_set_id: str) -> dict[str, Any]:
 def export_reference_set(reference_set_id: str, format: str = "json"):
     identifier = validated_optional_uuid(reference_set_id, "reference_set_id")
     if format.casefold() != "json":
-        raise HTTPException(status_code=422, detail={"code": "unsupported_export_format", "message": "Egyelőre JSON reference_set export támogatott."})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "unsupported_export_format",
+                "message": "Egyelőre JSON reference_set export támogatott.",
+            },
+        )
     with get_db() as conn:
         with conn.cursor() as cur:
             payload = _export_payload(cur, identifier)
-    filename = f"{payload['reference_set']['reference_key']}_reference_set_v{payload['reference_set']['version']}.json"
+    reference_set_payload = payload["reference_set"]
+    filename = (
+        f"{reference_set_payload['reference_key']}"
+        f"_reference_set_v{reference_set_payload['version']}.json"
+    )
     body = json.dumps(payload, default=str, ensure_ascii=False, indent=2)
-    return Response(body, media_type="application/json", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    return Response(
+        body,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/api/reference-sets/import", status_code=201)
@@ -337,17 +468,35 @@ def import_reference_set(file: UploadFile = File(...), activate: bool = True):
     payload = read_bounded_upload(
         file,
         max_bytes=REFERENCE_IMPORT_LIMIT_BYTES,
-        empty_detail={"code": "empty_reference_set", "message": "Üres reference_set nem importálható."},
-        too_large_detail={"code": "reference_set_too_large", "message": "A referencia csomag legfeljebb 64 MiB lehet."},
+        empty_detail={
+            "code": "empty_reference_set",
+            "message": "Üres reference_set nem importálható.",
+        },
+        too_large_detail={
+            "code": "reference_set_too_large",
+            "message": "A referencia csomag legfeljebb 64 MiB lehet.",
+        },
     )
     try:
         data = json.loads(payload.decode("utf-8-sig"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=422, detail={"code": "invalid_reference_set_json", "message": "Érvénytelen JSON referencia csomag."}) from exc
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_reference_set_json",
+                "message": "Érvénytelen JSON referencia csomag.",
+            },
+        ) from exc
     reference_set = data.get("reference_set") if isinstance(data, dict) else None
     spectrum_points = data.get("spectrum_points") if isinstance(data, dict) else None
     if not isinstance(reference_set, dict) or not isinstance(spectrum_points, list):
-        raise HTTPException(status_code=422, detail={"code": "invalid_reference_set_package", "message": "Hiányzó reference_set vagy spectrum_points."})
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_reference_set_package",
+                "message": "Hiányzó reference_set vagy spectrum_points.",
+            },
+        )
     request = ReferenceSetCaptureRequest(
         name=str(reference_set.get("name") or filename),
         reference_key=str(reference_set.get("reference_key") or Path(filename).stem),
@@ -355,7 +504,9 @@ def import_reference_set(file: UploadFile = File(...), activate: bool = True):
         measurement_session_id=None,
         operator_name=reference_set.get("created_by"),
         notes=reference_set.get("notes"),
-        spectrum_reference_kind=str((data.get("spectrum_reference") or {}).get("reference_kind") or "imported").replace("imported", "snapshot"),
+        spectrum_reference_kind=str(
+            (data.get("spectrum_reference") or {}).get("reference_kind") or "imported"
+        ).replace("imported", "snapshot"),
         spectrum_points=spectrum_points,
         spectrum_metadata={"imported_from": filename},
         include_wifi=False,
@@ -368,7 +519,11 @@ def import_reference_set(file: UploadFile = File(...), activate: bool = True):
 @router.get("/api/reference-sets/{reference_set_id}/compare/wifi")
 def compare_reference_set_wifi(reference_set_id: str, measurement_session_id: str | None = None):
     identifier = validated_optional_uuid(reference_set_id, "reference_set_id")
-    session_id = validated_optional_uuid(measurement_session_id, "measurement_session_id") if measurement_session_id else None
+    session_id = (
+        validated_optional_uuid(measurement_session_id, "measurement_session_id")
+        if measurement_session_id
+        else None
+    )
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT location_name FROM reference_sets WHERE id=%s", (identifier,))
@@ -386,9 +541,15 @@ def compare_reference_set_wifi(reference_set_id: str, measurement_session_id: st
 
 
 @router.get("/api/reference-sets/{reference_set_id}/compare/bluetooth")
-def compare_reference_set_bluetooth(reference_set_id: str, measurement_session_id: str | None = None):
+def compare_reference_set_bluetooth(
+    reference_set_id: str, measurement_session_id: str | None = None
+):
     identifier = validated_optional_uuid(reference_set_id, "reference_set_id")
-    session_id = validated_optional_uuid(measurement_session_id, "measurement_session_id") if measurement_session_id else None
+    session_id = (
+        validated_optional_uuid(measurement_session_id, "measurement_session_id")
+        if measurement_session_id
+        else None
+    )
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT location_name FROM reference_sets WHERE id=%s", (identifier,))

@@ -54,9 +54,9 @@ class AssistantSettings:
             "implemented": True,
             "enabled": self.enabled,
             "available": available,
-            "status": "configured" if available else (
-                "model_not_configured" if self.enabled else "disabled"
-            ),
+            "status": "configured"
+            if available
+            else ("model_not_configured" if self.enabled else "disabled"),
             "mode": "context_grounded_assistant",
             "model": self.model or None,
         }
@@ -68,24 +68,41 @@ class AssistantSettings:
             return configured
         try:
             with urllib.request.urlopen(
-                urllib.request.Request(self.ollama_url + "/api/version", headers={"Accept": "application/json"}),
+                urllib.request.Request(
+                    self.ollama_url + "/api/version", headers={"Accept": "application/json"}
+                ),
                 timeout=min(self.timeout_seconds, 3.0),
             ) as response:
                 version_payload = json.load(response)
             with urllib.request.urlopen(
-                urllib.request.Request(self.ollama_url + "/api/tags", headers={"Accept": "application/json"}),
+                urllib.request.Request(
+                    self.ollama_url + "/api/tags", headers={"Accept": "application/json"}
+                ),
                 timeout=min(self.timeout_seconds, 3.0),
             ) as response:
                 payload = json.load(response)
         except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
-            return {**configured, "available": False, "status": "ollama_unavailable", "error": str(exc)}
-        if not isinstance(version_payload, dict) or not isinstance(version_payload.get("version"), str):
+            return {
+                **configured,
+                "available": False,
+                "status": "ollama_unavailable",
+                "error": str(exc),
+            }
+        if not isinstance(version_payload, dict) or not isinstance(
+            version_payload.get("version"), str
+        ):
             return {**configured, "available": False, "status": "ollama_invalid_response"}
         if not isinstance(payload, dict) or not isinstance(payload.get("models"), list):
-            return {**configured, "available": False, "status": "ollama_invalid_response", "ollama_version": version_payload["version"]}
+            return {
+                **configured,
+                "available": False,
+                "status": "ollama_invalid_response",
+                "ollama_version": version_payload["version"],
+            }
         installed = {
             str(item.get("name") or item.get("model") or "")
-            for item in payload.get("models", []) if isinstance(item, dict)
+            for item in payload.get("models", [])
+            if isinstance(item, dict)
         }
         if not model_is_installed(self.model, installed):
             return {
@@ -95,8 +112,12 @@ class AssistantSettings:
                 "installed_models": sorted(name for name in installed if name),
                 "ollama_version": version_payload["version"],
             }
-        return {**configured, "status": "ready", "ollama_version": version_payload["version"],
-                "installed_models": sorted(name for name in installed if name)}
+        return {
+            **configured,
+            "status": "ready",
+            "ollama_version": version_payload["version"],
+            "installed_models": sorted(name for name in installed if name),
+        }
 
 
 KEYWORDS = {
@@ -151,8 +172,20 @@ KEYWORDS = {
 
 def select_context_kinds(question: str) -> tuple[str, ...]:
     normalized = question.casefold()
-    selected = [kind for kind, words in KEYWORDS.items() if any(word in normalized for word in words)]
-    if any(word in normalized for word in ("összefoglal", "osszefoglal", "foglald össze", "foglald ossze", "minden", "overview")):
+    selected = [
+        kind for kind, words in KEYWORDS.items() if any(word in normalized for word in words)
+    ]
+    if any(
+        word in normalized
+        for word in (
+            "összefoglal",
+            "osszefoglal",
+            "foglald össze",
+            "foglald ossze",
+            "minden",
+            "overview",
+        )
+    ):
         return tuple(KEYWORDS)
     return tuple(selected or ("sessions", "peaks", "anomalies"))
 
@@ -161,10 +194,20 @@ def is_mac_inventory_question(question: str) -> bool:
     """Identify requests that require a complete MAC inventory, not samples."""
     normalized = question.casefold()
     asks_about_mac = "mac" in normalized or "bssid" in normalized
-    asks_for_complete_list = any(term in normalized for term in (
-        "minden", "összes", "osszes", "valamennyi", "teljes lista",
-        "listáz", "listaz", "sorold", "mutasd",
-    ))
+    asks_for_complete_list = any(
+        term in normalized
+        for term in (
+            "minden",
+            "összes",
+            "osszes",
+            "valamennyi",
+            "teljes lista",
+            "listáz",
+            "listaz",
+            "sorold",
+            "mutasd",
+        )
+    )
     return asks_about_mac and asks_for_complete_list
 
 
@@ -224,7 +267,9 @@ QUERIES = {
 }
 
 
-def collect_sql_context(connection: Any, question: str, limit: int) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, str]]]:
+def collect_sql_context(
+    connection: Any, question: str, limit: int
+) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, str]]]:
     context: dict[str, list[dict[str, Any]]] = {}
     sources: list[dict[str, str]] = []
     with connection.cursor() as cursor:
@@ -241,33 +286,62 @@ def collect_sql_context(connection: Any, question: str, limit: int) -> tuple[dic
     return context, sources
 
 
-def build_grounded_prompt(question: str, context: dict[str, Any], sources: list[dict[str, str]]) -> str:
+def build_grounded_prompt(
+    question: str, context: dict[str, Any], sources: list[dict[str, str]]
+) -> str:
     bounded_context: dict[str, Any] = {}
-    populated_kinds = sum(1 for records in context.values() if isinstance(records, list) and records)
+    populated_kinds = sum(
+        1 for records in context.values() if isinstance(records, list) and records
+    )
     sample_limit = 3 if populated_kinds <= 2 else 1
     for kind, records in context.items():
         if isinstance(records, list):
-            bounded_context[kind] = {"supplied_count": len(records), "records": records[:sample_limit]}
+            bounded_context[kind] = {
+                "supplied_count": len(records),
+                "records": records[:sample_limit],
+            }
         else:
             bounded_context[kind] = records
     payload = json.dumps(
         {"context": bounded_context, "source_records": sources[:6]},
-        ensure_ascii=False, separators=(",", ":"),
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
     if len(payload) > 3_500:
         payload = payload[:3_500] + "...TRUNCATED"
     normalized = question.casefold()
-    hungarian_markers = ("á", "é", "í", "ó", "ö", "ő", "ú", "ü", "ű", "milyen", "mennyi", "foglald", "kérdés")
-    language = "Hungarian (hu)" if any(marker in normalized for marker in hungarian_markers) else "the language used by the question"
+    hungarian_markers = (
+        "á",
+        "é",
+        "í",
+        "ó",
+        "ö",
+        "ő",
+        "ú",
+        "ü",
+        "ű",
+        "milyen",
+        "mennyi",
+        "foglald",
+        "kérdés",
+    )
+    language = (
+        "Hungarian (hu)"
+        if any(marker in normalized for marker in hungarian_markers)
+        else "the language used by the question"
+    )
     return (
         "You are a measurement-data assistant. Use only the supplied context. "
-        "Never invent measurements, identities, causes, or conclusions. If evidence is insufficient, say so. "
-        "Return plain, natural human-readable prose, never JSON. Do not repeat the question. Use clear bullet lists where useful. "
+        "Never invent measurements, identities, causes, or conclusions. "
+        "If evidence is insufficient, say so. "
+        "Return plain, natural human-readable prose, never JSON. Do not repeat the question. "
+        "Use clear bullet lists where useful. "
         "Cite relevant records as [record_type:record_id].\n\n"
         f"Structured context: {payload}\n\n"
         f"Question: {question}\n"
         f"Required answer language: {language}. This language requirement is mandatory. "
-        "Answer the question directly; do not interpret language instructions as names or measurement entities."
+        "Answer the question directly; do not interpret language instructions as names "
+        "or measurement entities."
     )
 
 
@@ -294,21 +368,20 @@ def call_ollama(settings: AssistantSettings, prompt: str) -> str:
         raise RuntimeError("ai_component_not_available")
     request = urllib.request.Request(
         settings.ollama_url + "/api/generate",
-        data=json.dumps({
-            "model": settings.model,
-            "prompt": prompt,
-            "stream": False,
-            # Qwen 3 enables reasoning by default. With a bounded output budget
-            # it can spend every token on the separate `thinking` field and
-            # return an empty `response`, which is unusable by this endpoint.
-            "think": False,
-            "keep_alive": "10m",
-            "options": {
-                "num_ctx": 4096,
-                "num_predict": 192,
-                "temperature": 0.1
-            }
-        }, ensure_ascii=False).encode("utf-8"),
+        data=json.dumps(
+            {
+                "model": settings.model,
+                "prompt": prompt,
+                "stream": False,
+                # Qwen 3 enables reasoning by default. With a bounded output budget
+                # it can spend every token on the separate `thinking` field and
+                # return an empty `response`, which is unusable by this endpoint.
+                "think": False,
+                "keep_alive": "10m",
+                "options": {"num_ctx": 4096, "num_predict": 192, "temperature": 0.1},
+            },
+            ensure_ascii=False,
+        ).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
     try:

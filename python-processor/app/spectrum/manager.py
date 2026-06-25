@@ -5,8 +5,8 @@ from app.config import SpectrumSettings
 from .sources.aaronia_rtsa import AaroniaRTSAHTTPSource
 from .sources.base import SpectrumFrame, SpectrumSource, SpectrumSourceUnavailable
 from .sources.file_replay import FileReplaySpectrumSource
-from .sources.spectrum_ingest import SpectrumIngestWebSocketSource
 from .sources.simulator import SimulatorSpectrumSource
+from .sources.spectrum_ingest import SpectrumIngestWebSocketSource
 
 
 class SpectrumSourceManager:

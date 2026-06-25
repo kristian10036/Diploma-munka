@@ -11,15 +11,12 @@ import struct
 import sys
 import urllib.parse
 
-
 MAX_MESSAGE_SIZE = 16 * 1024 * 1024
 
 
 def main() -> int:
     url = urllib.parse.urlparse(
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else "ws://127.0.0.1:8765/ws/spectrum"
+        sys.argv[1] if len(sys.argv) > 1 else "ws://127.0.0.1:8765/ws/spectrum"
     )
 
     if url.scheme != "ws":
@@ -57,9 +54,7 @@ def main() -> int:
             chunk = sock.recv(4096)
 
             if not chunk:
-                raise SystemExit(
-                    "Connection closed during WebSocket handshake"
-                )
+                raise SystemExit("Connection closed during WebSocket handshake")
 
             receive_buffer.extend(chunk)
 
@@ -77,9 +72,7 @@ def main() -> int:
         status_line = header_lines[0]
 
         if " 101 " not in status_line:
-            raise SystemExit(
-                f"WebSocket handshake failed: {status_line}"
-            )
+            raise SystemExit(f"WebSocket handshake failed: {status_line}")
 
         headers: dict[str, str] = {}
 
@@ -92,10 +85,7 @@ def main() -> int:
 
         expected_accept = base64.b64encode(
             hashlib.sha1(
-                (
-                    websocket_key
-                    + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-                ).encode("ascii")
+                (websocket_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
             ).digest()
         ).decode("ascii")
 
@@ -112,9 +102,7 @@ def main() -> int:
                 chunk = sock.recv(min(max(length - len(receive_buffer), 1), 65536))
 
                 if not chunk:
-                    raise SystemExit(
-                        "Connection closed while reading WebSocket frame"
-                    )
+                    raise SystemExit("Connection closed while reading WebSocket frame")
 
                 receive_buffer.extend(chunk)
 
@@ -142,9 +130,7 @@ def main() -> int:
                 )[0]
 
             if payload_length > MAX_MESSAGE_SIZE:
-                raise SystemExit(
-                    f"WebSocket frame is too large: {payload_length} bytes"
-                )
+                raise SystemExit(f"WebSocket frame is too large: {payload_length} bytes")
 
             masking_key = read_exact(4) if masked else None
             payload = bytearray(read_exact(payload_length))
@@ -162,9 +148,7 @@ def main() -> int:
             fin, opcode, payload = read_websocket_frame()
 
             if opcode == 0x8:
-                raise SystemExit(
-                    "WebSocket server closed the connection before a frame arrived"
-                )
+                raise SystemExit("WebSocket server closed the connection before a frame arrived")
 
             # Ping/pong vezérlő frame-eket a smoke teszt átugorhatja.
             if opcode in (0x9, 0xA):
@@ -172,25 +156,19 @@ def main() -> int:
 
             if opcode in (0x1, 0x2):
                 if message_opcode is not None:
-                    raise SystemExit(
-                        "Unexpected new WebSocket data message"
-                    )
+                    raise SystemExit("Unexpected new WebSocket data message")
 
                 message_opcode = opcode
                 message.extend(payload)
 
             elif opcode == 0x0:
                 if message_opcode is None:
-                    raise SystemExit(
-                        "Unexpected WebSocket continuation frame"
-                    )
+                    raise SystemExit("Unexpected WebSocket continuation frame")
 
                 message.extend(payload)
 
             else:
-                raise SystemExit(
-                    f"Unsupported WebSocket opcode: {opcode}"
-                )
+                raise SystemExit(f"Unsupported WebSocket opcode: {opcode}")
 
             if len(message) > MAX_MESSAGE_SIZE:
                 raise SystemExit("WebSocket message is too large")
@@ -204,20 +182,15 @@ def main() -> int:
         try:
             decoded_message = message.decode("utf-8")
         except UnicodeDecodeError as error:
-            raise SystemExit(
-                f"WebSocket message is not valid UTF-8: {error}"
-            ) from error
+            raise SystemExit(f"WebSocket message is not valid UTF-8: {error}") from error
 
         try:
             frame = json.loads(decoded_message)
         except json.JSONDecodeError as error:
-            preview = decoded_message[
-                max(0, error.pos - 100):error.pos + 100
-            ]
+            preview = decoded_message[max(0, error.pos - 100) : error.pos + 100]
 
             raise SystemExit(
-                "Invalid SpectrumFrame JSON: "
-                f"{error}; nearby content={preview!r}"
+                f"Invalid SpectrumFrame JSON: {error}; nearby content={preview!r}"
             ) from error
 
         required_fields = {
@@ -233,10 +206,7 @@ def main() -> int:
         missing_fields = required_fields - frame.keys()
 
         if missing_fields:
-            raise SystemExit(
-                "Missing SpectrumFrame fields: "
-                f"{sorted(missing_fields)}"
-            )
+            raise SystemExit(f"Missing SpectrumFrame fields: {sorted(missing_fields)}")
 
         powers = frame["powers_dbm"]
         number_of_points = frame["num_points"]
@@ -245,9 +215,7 @@ def main() -> int:
             raise SystemExit("powers_dbm must be an array")
 
         if number_of_points != len(powers):
-            raise SystemExit(
-                "num_points does not match powers_dbm length"
-            )
+            raise SystemExit("num_points does not match powers_dbm length")
 
         print(
             json.dumps(

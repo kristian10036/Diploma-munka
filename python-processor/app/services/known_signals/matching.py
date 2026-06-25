@@ -14,15 +14,34 @@ def evaluate_known_signal(profile: dict[str, Any], measurement: dict[str, Any]) 
     (reasons if frequency_delta <= tolerance else mismatches).append("frequency")
 
     checks = (
-        ("bandwidth_hz", "bandwidth", lambda value, target: abs(value-target) <= max(target*0.25, tolerance)),
+        (
+            "bandwidth_hz",
+            "bandwidth",
+            lambda value, target: abs(value - target) <= max(target * 0.25, tolerance),
+        ),
         ("expected_power_min_dbm", "power_min", lambda value, target: value >= target),
         ("expected_power_max_dbm", "power_max", lambda value, target: value <= target),
-        ("modulation", "modulation", lambda value, target: str(value).casefold() == str(target).casefold()),
-        ("protocol", "protocol", lambda value, target: str(value).casefold() == str(target).casefold()),
-        ("source_type", "source_type", lambda value, target: str(value).casefold() == str(target).casefold()),
+        (
+            "modulation",
+            "modulation",
+            lambda value, target: str(value).casefold() == str(target).casefold(),
+        ),
+        (
+            "protocol",
+            "protocol",
+            lambda value, target: str(value).casefold() == str(target).casefold(),
+        ),
+        (
+            "source_type",
+            "source_type",
+            lambda value, target: str(value).casefold() == str(target).casefold(),
+        ),
         ("location_id", "location", lambda value, target: str(value) == str(target)),
     )
-    measurement_keys = {"expected_power_min_dbm": "power_dbm", "expected_power_max_dbm": "power_dbm"}
+    measurement_keys = {
+        "expected_power_min_dbm": "power_dbm",
+        "expected_power_max_dbm": "power_dbm",
+    }
     for profile_key, reason, compare in checks:
         target = profile.get(profile_key)
         if target is None:
@@ -36,7 +55,9 @@ def evaluate_known_signal(profile: dict[str, Any], measurement: dict[str, Any]) 
             mismatches.append(reason)
 
     matched = not mismatches
-    suppress = matched and bool(profile.get("suppress_alerts")) and profile.get("status") == "active"
+    suppress = (
+        matched and bool(profile.get("suppress_alerts")) and profile.get("status") == "active"
+    )
     return {
         "known_signal_id": str(profile.get("id")) if profile.get("id") else None,
         "matched": matched,

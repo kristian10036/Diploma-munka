@@ -136,7 +136,9 @@ class SigMfRecordingWriter:
                     "core:sample_rate": self.sample_rate,
                     "core:version": "1.0.0",
                     "core:recorder": "DM RF/TSCM platform",
-                    "core:description": "IQ recording; mock-only unless source metadata states hardware",
+                    "core:description": (
+                        "IQ recording; mock-only unless source metadata states hardware"
+                    ),
                     "dm:recording_id": self.recording_id,
                     "dm:recording_type": "iq",
                     "dm:session_id": self.session_id,
@@ -270,8 +272,10 @@ def create_mock_iq_recording(
     )
     try:
         samples = (
-            complex(math.cos(2 * math.pi * tone_hz * n / sample_rate),
-                    math.sin(2 * math.pi * tone_hz * n / sample_rate))
+            complex(
+                math.cos(2 * math.pi * tone_hz * n / sample_rate),
+                math.sin(2 * math.pi * tone_hz * n / sample_rate),
+            )
             for n in range(sample_count)
         )
         writer.write(samples)

@@ -12,7 +12,6 @@ import numpy as np
 from .classifier import RF_CLASSES
 from .preprocessing import SpectrogramPreprocessor
 
-
 LABEL_QUALITIES = {"ground_truth", "controlled_simulation", "weak_label"}
 
 

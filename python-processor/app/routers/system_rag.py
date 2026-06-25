@@ -4,17 +4,30 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from app.assistant import (build_grounded_prompt, call_ollama, collect_sql_context,
-    is_mac_inventory_question, model_is_installed)
+from app.assistant import (
+    build_grounded_prompt,
+    call_ollama,
+    collect_sql_context,
+    is_mac_inventory_question,
+    model_is_installed,
+)
 from app.db import get_db
 from app.rag import database_rag_status, index_document, retrieve_chunks
 from app.rf_agent_client import rf_agent_status
-from app.runtime import (ASSISTANT_SETTINGS, BETTERCAP_SETTINGS, DATABASE_URL, KISMET_SETTINGS,
-    ML_CLASSIFIER, RAG_SETTINGS, RF_AGENT_SETTINGS)
+from app.runtime import (
+    ASSISTANT_SETTINGS,
+    BETTERCAP_SETTINGS,
+    DATABASE_URL,
+    KISMET_SETTINGS,
+    ML_CLASSIFIER,
+    RAG_SETTINGS,
+    RF_AGENT_SETTINGS,
+)
 from app.schemas import AskRequest, RagDocumentRequest, RagRetrieveRequest
 from app.services.persistence import fetch_repeated_macs
 
 router = APIRouter()
+
 
 @router.get("/api/system/status")
 def system_status():
@@ -31,9 +44,18 @@ def system_status():
                 cursor.execute("SELECT 1 AS ok")
                 cursor.fetchone()
             database = {"configured": True, "available": True, "status": "ready"}
-            rag = {"implemented": True, "enabled": RAG_SETTINGS.enabled, **database_rag_status(connection, RAG_SETTINGS)}
+            rag = {
+                "implemented": True,
+                "enabled": RAG_SETTINGS.enabled,
+                **database_rag_status(connection, RAG_SETTINGS),
+            }
     except HTTPException as exc:
-        database = {"configured": bool(DATABASE_URL), "available": False, "status": "unreachable", "error": str(exc.detail)}
+        database = {
+            "configured": bool(DATABASE_URL),
+            "available": False,
+            "status": "unreachable",
+            "error": str(exc.detail),
+        }
     return {
         "status": "ok",
         "backend": {"available": True, "status": "ready"},
@@ -60,14 +82,21 @@ def rag_index_document(request: RagDocumentRequest):
     if not title or len(title) > 500:
         raise HTTPException(status_code=422, detail="document title must contain 1-500 characters")
     if not content or len(content) > 2_000_000:
-        raise HTTPException(status_code=422, detail="document content must contain 1-2000000 characters")
+        raise HTTPException(
+            status_code=422, detail="document content must contain 1-2000000 characters"
+        )
     if not RAG_SETTINGS.configured():
         raise HTTPException(status_code=503, detail="rag_component_not_available")
     try:
         with get_db() as connection:
             return index_document(
-                connection, RAG_SETTINGS, title, content, request.source,
-                request.document_type, request.metadata or {},
+                connection,
+                RAG_SETTINGS,
+                title,
+                content,
+                request.source,
+                request.document_type,
+                request.metadata or {},
             )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -88,10 +117,16 @@ def rag_retrieve(request: RagRetrieveRequest):
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {
-        "query": query, "top_k": request.top_k or RAG_SETTINGS.default_top_k,
-        "embedding_model": RAG_SETTINGS.embedding_model, "items": items,
+        "query": query,
+        "top_k": request.top_k or RAG_SETTINGS.default_top_k,
+        "embedding_model": RAG_SETTINGS.embedding_model,
+        "items": items,
         "source_records": [
-            {"record_type": "document_chunk", "record_id": item["chunk_id"], "document_id": item["document_id"]}
+            {
+                "record_type": "document_chunk",
+                "record_id": item["chunk_id"],
+                "document_id": item["document_id"],
+            }
             for item in items
         ],
     }
@@ -157,12 +192,15 @@ def ask_database(request: AskRequest):
                 )
                 mac_inventory = [dict(row) for row in cursor.fetchall()]
         wifi_macs = [row["mac_address"] for row in mac_inventory if row["domain"] == "wifi"]
-        bluetooth_macs = [row["mac_address"] for row in mac_inventory if row["domain"] == "bluetooth"]
+        bluetooth_macs = [
+            row["mac_address"] for row in mac_inventory if row["domain"] == "bluetooth"
+        ]
         unique_macs = {row["mac_address"] for row in mac_inventory}
         answer_sections = [
             f"Összesen {len(unique_macs)} különböző MAC-cím látható az adatbázisban.",
             f"Wi-Fi BSSID-k ({len(wifi_macs)}):\n" + "\n".join(f"- {mac}" for mac in wifi_macs),
-            f"Bluetooth MAC-címek ({len(bluetooth_macs)}):\n" + "\n".join(f"- {mac}" for mac in bluetooth_macs),
+            f"Bluetooth MAC-címek ({len(bluetooth_macs)}):\n"
+            + "\n".join(f"- {mac}" for mac in bluetooth_macs),
         ]
         return {
             "mode": "structured_sql_answer",

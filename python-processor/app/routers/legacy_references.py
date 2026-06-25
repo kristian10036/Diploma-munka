@@ -10,13 +10,34 @@ from fastapi.responses import FileResponse
 from psycopg.types.json import Jsonb
 
 from app.db import get_db
-from app.services.persistence import (create_csv_import, ensure_location, parse_optional_hz,
-    parse_required_float, parse_required_frequency, save_reference_asset, save_uploaded_file, value_or_default)
-from app.utils.parsing import parse_csv_bytes, parse_datetime_value, parse_float, parse_frequency_hz, parse_int, row_get
-from app.utils.uploads import (REFERENCE_IMAGE_LIMIT_BYTES, REFERENCE_IMPORT_LIMIT_BYTES,
-    detect_reference_image, read_bounded_upload, reject_binary_text_payload)
+from app.services.persistence import (
+    create_csv_import,
+    ensure_location,
+    parse_optional_hz,
+    parse_required_float,
+    parse_required_frequency,
+    save_reference_asset,
+    save_uploaded_file,
+    value_or_default,
+)
+from app.utils.parsing import (
+    parse_csv_bytes,
+    parse_datetime_value,
+    parse_float,
+    parse_frequency_hz,
+    parse_int,
+    row_get,
+)
+from app.utils.uploads import (
+    REFERENCE_IMAGE_LIMIT_BYTES,
+    REFERENCE_IMPORT_LIMIT_BYTES,
+    detect_reference_image,
+    read_bounded_upload,
+    reject_binary_text_payload,
+)
 
 router = APIRouter()
+
 
 @router.post("/api/references/bands/import")
 def import_reference_bands_csv(
@@ -41,13 +62,19 @@ def import_reference_bands_csv(
     with get_db() as conn:
         with conn.cursor() as cur:
             csv_import_id = create_csv_import(cur, filename, "reference_bands")
-            uploaded_file_id = save_uploaded_file(cur, csv_import_id, filename, file_bytes, file.content_type)
+            uploaded_file_id = save_uploaded_file(
+                cur, csv_import_id, filename, file_bytes, file.content_type
+            )
 
             for row_number, row in enumerate(rows, start=2):
                 try:
-                    row_source_name = value_or_default(row_get(row, "source_name", "source"), source_name)
+                    row_source_name = value_or_default(
+                        row_get(row, "source_name", "source"), source_name
+                    )
                     row_version = value_or_default(row_get(row, "version"), version)
-                    row_location_name = value_or_default(row_get(row, "location_name", "location", "helyszin"), location_name)
+                    row_location_name = value_or_default(
+                        row_get(row, "location_name", "location", "helyszin"), location_name
+                    )
                     if not row_source_name:
                         raise ValueError("source_name hianyzik.")
                     if not row_location_name:
@@ -84,9 +111,32 @@ def import_reference_bands_csv(
                             start_hz,
                             end_hz,
                             str(band_name),
-                            row_get(row, "expected_devices", "expected_devices_or_systems", "devices", "expected", "eszkozok"),
-                            parse_float(row_get(row, "normal_min_dbm", "temporary_normal_min_dbm", "min_dbm", "normal_min")),
-                            parse_float(row_get(row, "normal_max_dbm", "temporary_normal_max_dbm", "max_dbm", "normal_max")),
+                            row_get(
+                                row,
+                                "expected_devices",
+                                "expected_devices_or_systems",
+                                "devices",
+                                "expected",
+                                "eszkozok",
+                            ),
+                            parse_float(
+                                row_get(
+                                    row,
+                                    "normal_min_dbm",
+                                    "temporary_normal_min_dbm",
+                                    "min_dbm",
+                                    "normal_min",
+                                )
+                            ),
+                            parse_float(
+                                row_get(
+                                    row,
+                                    "normal_max_dbm",
+                                    "temporary_normal_max_dbm",
+                                    "max_dbm",
+                                    "normal_max",
+                                )
+                            ),
                             parse_int(row_get(row, "priority")) or 0,
                             row_get(row, "notes", "note", "comment", "megjegyzes"),
                             Jsonb(row),
@@ -96,10 +146,14 @@ def import_reference_bands_csv(
                             row_get(row, "reference_profile"),
                             row_get(row, "confidence"),
                             parse_float(row_get(row, "peak_alarm_dbm", "temporary_peak_alarm_dbm")),
-                            parse_float(row_get(row, "anomaly_delta_db_above_baseline", "anomaly_delta_db")),
+                            parse_float(
+                                row_get(row, "anomaly_delta_db_above_baseline", "anomaly_delta_db")
+                            ),
                             str(row_get(row, "requires_site_baseline")).strip().upper() == "TRUE",
-                            str(row_get(row, "manual_site_baseline_allowed")).strip().upper() != "FALSE",
-                            row_get(row, "temporary_normal_min_dbm", "temporary_normal_max_dbm") is not None,
+                            str(row_get(row, "manual_site_baseline_allowed")).strip().upper()
+                            != "FALSE",
+                            row_get(row, "temporary_normal_min_dbm", "temporary_normal_max_dbm")
+                            is not None,
                         ),
                     )
                     processed_rows += 1
@@ -163,27 +217,47 @@ def import_reference_spectrum_csv(
     with get_db() as conn:
         with conn.cursor() as cur:
             csv_import_id = create_csv_import(cur, filename, "reference_spectrum")
-            uploaded_file_id = save_uploaded_file(cur, csv_import_id, filename, file_bytes, file.content_type)
+            uploaded_file_id = save_uploaded_file(
+                cur, csv_import_id, filename, file_bytes, file.content_type
+            )
 
             for row_number, row in enumerate(rows, start=2):
                 try:
-                    row_reference_id = value_or_default(row_get(row, "reference_id", "ref_id"), fallback_reference_id)
-                    row_location_name = value_or_default(row_get(row, "location_name", "location", "helyszin"), location_name)
-                    row_device_name = value_or_default(row_get(row, "device_name", "device", "instrument"), device_name)
+                    row_reference_id = value_or_default(
+                        row_get(row, "reference_id", "ref_id"), fallback_reference_id
+                    )
+                    row_location_name = value_or_default(
+                        row_get(row, "location_name", "location", "helyszin"), location_name
+                    )
+                    row_device_name = value_or_default(
+                        row_get(row, "device_name", "device", "instrument"), device_name
+                    )
                     if not row_reference_id:
                         raise ValueError("reference_id hianyzik.")
                     if not row_location_name:
                         raise ValueError("location_name hianyzik.")
 
                     location_id = ensure_location(cur, str(row_location_name))
-                    measured_frequency_hz = parse_optional_hz(row, "measured_frequency_hz", "frequency_hz", "freq_hz")
+                    measured_frequency_hz = parse_optional_hz(
+                        row, "measured_frequency_hz", "frequency_hz", "freq_hz"
+                    )
                     if measured_frequency_hz is None:
-                        measured_frequency_hz = parse_required_frequency(row, "measured_frequency", "frequency", "freq")
-                    actual_rf_frequency_hz = parse_optional_hz(row, "actual_rf_frequency_hz", "rf_frequency_hz")
+                        measured_frequency_hz = parse_required_frequency(
+                            row, "measured_frequency", "frequency", "freq"
+                        )
+                    actual_rf_frequency_hz = parse_optional_hz(
+                        row, "actual_rf_frequency_hz", "rf_frequency_hz"
+                    )
                     if actual_rf_frequency_hz is None:
-                        actual_rf_frequency_hz = parse_frequency_hz(row_get(row, "actual_rf_frequency", "rf_frequency"))
-                    power_dbm = parse_required_float(row, "power_dbm", "power", "dbm", "level", "signal")
-                    point_time = parse_datetime_value(row_get(row, "timestamp", "time", "measured_at")) or datetime.now(timezone.utc)
+                        actual_rf_frequency_hz = parse_frequency_hz(
+                            row_get(row, "actual_rf_frequency", "rf_frequency")
+                        )
+                    power_dbm = parse_required_float(
+                        row, "power_dbm", "power", "dbm", "level", "signal"
+                    )
+                    point_time = parse_datetime_value(
+                        row_get(row, "timestamp", "time", "measured_at")
+                    ) or datetime.now(timezone.utc)
 
                     cur.execute(
                         """
@@ -203,8 +277,10 @@ def import_reference_spectrum_csv(
                             measured_frequency_hz,
                             actual_rf_frequency_hz or measured_frequency_hz,
                             power_dbm,
-                            parse_optional_hz(row, "rbw_hz") or parse_frequency_hz(row_get(row, "rbw")),
-                            parse_optional_hz(row, "vbw_hz") or parse_frequency_hz(row_get(row, "vbw")),
+                            parse_optional_hz(row, "rbw_hz")
+                            or parse_frequency_hz(row_get(row, "rbw")),
+                            parse_optional_hz(row, "vbw_hz")
+                            or parse_frequency_hz(row_get(row, "vbw")),
                             row_get(row, "antenna"),
                             row_get(row, "downconverter_profile", "downconverter"),
                             Jsonb(row),
@@ -314,7 +390,12 @@ def upload_reference_image(
             image_id = str(cur.fetchone()["id"])
         conn.commit()
 
-    return {"id": image_id, "filename": filename, "start_hz": start_hz_value, "end_hz": end_hz_value}
+    return {
+        "id": image_id,
+        "filename": filename,
+        "start_hz": start_hz_value,
+        "end_hz": end_hz_value,
+    }
 
 
 @router.get("/api/references/bands")
@@ -431,7 +512,8 @@ def get_reference_image_file(image_id: str):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT storage_path, content_type, original_filename FROM reference_images WHERE id = %s",
+                "SELECT storage_path, content_type, original_filename FROM reference_images "
+                "WHERE id = %s",
                 (image_id,),
             )
             row = cur.fetchone()
@@ -440,4 +522,6 @@ def get_reference_image_file(image_id: str):
     storage_path = Path(row["storage_path"])
     if not storage_path.exists():
         raise HTTPException(status_code=404, detail="Referencia kep fajl nem talalhato.")
-    return FileResponse(storage_path, media_type=row["content_type"], filename=row["original_filename"])
+    return FileResponse(
+        storage_path, media_type=row["content_type"], filename=row["original_filename"]
+    )

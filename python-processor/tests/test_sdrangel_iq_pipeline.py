@@ -31,8 +31,13 @@ class IqDataPlaneTests(unittest.TestCase):
 
     def test_bounded_queue_drop_oldest(self):
         config = IqDataPlaneConfig(
-            True, "mock", "memory://sink", "cf32_le", 48_000,
-            queue_size=1, drop_policy="drop_oldest",
+            True,
+            "mock",
+            "memory://sink",
+            "cf32_le",
+            48_000,
+            queue_size=1,
+            drop_policy="drop_oldest",
         )
         pipeline = IqDataPlane(config, MockIqSink())
         packets = list(MockIqSource(packet_count=2, samples_per_packet=4).packets())

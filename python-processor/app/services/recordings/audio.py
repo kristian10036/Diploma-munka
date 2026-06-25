@@ -189,8 +189,7 @@ def create_mock_audio_recording(
     try:
         sample_count = max(1, int(round(sample_rate * duration_seconds)))
         writer.write(
-            0.25 * math.sin(2 * math.pi * tone_hz * n / sample_rate)
-            for n in range(sample_count)
+            0.25 * math.sin(2 * math.pi * tone_hz * n / sample_rate) for n in range(sample_count)
         )
         return writer.close()
     except Exception:

@@ -48,7 +48,10 @@ class IqPacket:
             raise ValueError("invalid_iq_sample_count")
         if self.packet_loss < 0 or self.overflow < 0:
             raise ValueError("negative_iq_quality_counter")
-        if any(not math.isfinite(sample.real) or not math.isfinite(sample.imag) for sample in self.samples):
+        if any(
+            not math.isfinite(sample.real) or not math.isfinite(sample.imag)
+            for sample in self.samples
+        ):
             raise ValueError("non_finite_iq_sample")
 
 
@@ -75,7 +78,10 @@ class IqDataPlaneConfig:
     @classmethod
     def from_env(cls) -> "IqDataPlaneConfig":
         enabled = os.getenv("SDRANGEL_ENABLED", "false").strip().lower() in {
-            "1", "true", "yes", "on"
+            "1",
+            "true",
+            "yes",
+            "on",
         }
         try:
             sample_rate = int(os.getenv("SDRANGEL_IQ_SAMPLE_RATE_HZ", "0"))
@@ -233,7 +239,10 @@ class IqDataPlane:
             "reconnects": self.stats.reconnects,
             "last_error": self.stats.last_error,
             "hardware_tested": False,
-            "note": "No SDRangel network IQ transport is selected without a verified version/plugin profile.",
+            "note": (
+                "No SDRangel network IQ transport is selected without a verified "
+                "version/plugin profile."
+            ),
         }
 
 
@@ -252,8 +261,10 @@ class MockIqSource:
                 timestamp_ns=time.time_ns() + sequence,
                 sequence=sequence,
                 samples=tuple(
-                    complex(math.cos(2 * math.pi * n / self.samples_per_packet),
-                            math.sin(2 * math.pi * n / self.samples_per_packet))
+                    complex(
+                        math.cos(2 * math.pi * n / self.samples_per_packet),
+                        math.sin(2 * math.pi * n / self.samples_per_packet),
+                    )
                     for n in range(self.samples_per_packet)
                 ),
             )

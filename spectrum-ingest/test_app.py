@@ -1,13 +1,14 @@
 import asyncio
 import importlib.util
 import json
-from pathlib import Path
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
 SPECTRUM_INGEST_ROOT = Path(__file__).resolve().parent
+
 
 def _prometheus_client_missing() -> bool:
     if "prometheus_client" in sys.modules:
@@ -19,6 +20,7 @@ def _prometheus_client_missing() -> bool:
 
 
 if _prometheus_client_missing():
+
     class _Metric:
         def inc(self, _value: float = 1) -> None:
             return None
@@ -103,13 +105,15 @@ def test_validate_frame_accepts_valid_shapes() -> None:
     assert valid, error
 
     wide = frame()
-    wide.update({
-        "start_frequency_hz": 5_000_000,
-        "stop_frequency_hz": 18_000_000_000,
-        "step_frequency_hz": 8_997_500_000,
-        "center_frequency_hz": 9_002_500_000,
-        "sample_rate_hz": 17_995_000_000,
-    })
+    wide.update(
+        {
+            "start_frequency_hz": 5_000_000,
+            "stop_frequency_hz": 18_000_000_000,
+            "step_frequency_hz": 8_997_500_000,
+            "center_frequency_hz": 9_002_500_000,
+            "sample_rate_hz": 17_995_000_000,
+        }
+    )
     valid, error = validate_frame(wide)
     assert valid, error
 

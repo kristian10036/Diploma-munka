@@ -68,5 +68,8 @@ def detect_reference_image(payload: bytes, filename: str = "") -> DetectedImage:
     suffix = Path(filename).suffix.lower()
     raise HTTPException(
         status_code=415,
-        detail=f"A referencia kep tenyleges formatuma nem tamogatott ({suffix or 'ismeretlen'}). Csak PNG vagy BMP engedelyezett.",
+        detail=(
+            f"A referencia kep tenyleges formatuma nem tamogatott ({suffix or 'ismeretlen'}). "
+            "Csak PNG vagy BMP engedelyezett."
+        ),
     )

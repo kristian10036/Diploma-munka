@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import os
 from collections import Counter, deque
 from dataclasses import dataclass, field
@@ -104,10 +103,17 @@ class SpectrumAnomalyDetector:
         self.frames_processed = 0
 
     @staticmethod
-    def _validate(frequencies_hz: Sequence[int | float], powers_dbm: Sequence[int | float]) -> tuple[np.ndarray, np.ndarray]:
+    def _validate(
+        frequencies_hz: Sequence[int | float], powers_dbm: Sequence[int | float]
+    ) -> tuple[np.ndarray, np.ndarray]:
         frequencies = np.asarray(frequencies_hz, dtype=np.float64)
         powers = np.asarray(powers_dbm, dtype=np.float64)
-        if frequencies.ndim != 1 or powers.ndim != 1 or len(frequencies) != len(powers) or len(powers) < 2:
+        if (
+            frequencies.ndim != 1
+            or powers.ndim != 1
+            or len(frequencies) != len(powers)
+            or len(powers) < 2
+        ):
             raise ValueError("invalid_spectrum_shape")
         if not np.isfinite(frequencies).all() or not np.isfinite(powers).all():
             raise ValueError("non_finite_spectrum")
@@ -158,15 +164,29 @@ class SpectrumAnomalyDetector:
         if sequence is not None:
             if self._last_sequence is not None and sequence > self._last_sequence + 1:
                 gap = sequence - self._last_sequence - 1
-                detections.append(Detection(
-                    entity_domain="technical", class_name="sequence_gap", severity="medium",
-                    confidence=1.0, explanation=f"A forrásból {gap} spektrumframe hiányzik.",
-                    evidence={"previous_sequence": self._last_sequence, "sequence": sequence, "gap": gap,
-                              "source_type": source_type}, detected_at=detected_at,
-                ))
+                detections.append(
+                    Detection(
+                        entity_domain="technical",
+                        class_name="sequence_gap",
+                        severity="medium",
+                        confidence=1.0,
+                        explanation=f"A forrásból {gap} spektrumframe hiányzik.",
+                        evidence={
+                            "previous_sequence": self._last_sequence,
+                            "sequence": sequence,
+                            "gap": gap,
+                            "source_type": source_type,
+                        },
+                        detected_at=detected_at,
+                    )
+                )
             self._last_sequence = sequence
 
-        if self._frequencies is None or len(self._frequencies) != len(frequencies) or not np.allclose(self._frequencies, frequencies):
+        if (
+            self._frequencies is None
+            or len(self._frequencies) != len(frequencies)
+            or not np.allclose(self._frequencies, frequencies)
+        ):
             self._powers.clear()
             self._dominant_history.clear()
             self._last_dominant_hz = None
@@ -197,7 +217,9 @@ class SpectrumAnomalyDetector:
         new_mask = powers > threshold
         groups = sorted(
             self._groups(new_mask),
-            key=lambda group: float(np.max(powers[group[0]:group[1] + 1] - baseline[group[0]:group[1] + 1])),
+            key=lambda group: float(
+                np.max(powers[group[0] : group[1] + 1] - baseline[group[0] : group[1] + 1])
+            ),
             reverse=True,
         )
         bin_hz = float(np.median(np.diff(frequencies)))
@@ -207,30 +229,55 @@ class SpectrumAnomalyDetector:
         current_occupancy = float(np.mean(powers > occupancy_threshold))
         baseline_occupancy = float(np.mean(baseline > baseline_floor + self.config.peak_delta_db))
 
-        if abs(current_floor - baseline_floor) >= self.config.noise_floor_shift_db and self._emit_once("noise_floor_shift"):
-            detections.append(Detection(
-                entity_domain="spectrum", class_name="noise_floor_shift", severity="medium",
-                confidence=min(0.99, 0.65 + abs(current_floor - baseline_floor) / 40.0),
-                explanation="A teljes sáv robusztus zajpadlója jelentősen eltért a baseline-tól.",
-                start_frequency_hz=int(frequencies[0]), stop_frequency_hz=int(frequencies[-1]),
-                evidence={"current_median_dbm": current_floor, "baseline_median_dbm": baseline_floor,
-                          "delta_db": current_floor - baseline_floor, "baseline_source": baseline_source},
-                detected_at=detected_at,
-            ))
+        if abs(
+            current_floor - baseline_floor
+        ) >= self.config.noise_floor_shift_db and self._emit_once("noise_floor_shift"):
+            detections.append(
+                Detection(
+                    entity_domain="spectrum",
+                    class_name="noise_floor_shift",
+                    severity="medium",
+                    confidence=min(0.99, 0.65 + abs(current_floor - baseline_floor) / 40.0),
+                    explanation=(
+                        "A teljes sáv robusztus zajpadlója jelentősen eltért a baseline-tól."
+                    ),
+                    start_frequency_hz=int(frequencies[0]),
+                    stop_frequency_hz=int(frequencies[-1]),
+                    evidence={
+                        "current_median_dbm": current_floor,
+                        "baseline_median_dbm": baseline_floor,
+                        "delta_db": current_floor - baseline_floor,
+                        "baseline_source": baseline_source,
+                    },
+                    detected_at=detected_at,
+                )
+            )
 
         occupancy_delta = current_occupancy - baseline_occupancy
-        if abs(occupancy_delta) >= self.config.occupancy_change_fraction and self._emit_once("occupancy_change"):
-            detections.append(Detection(
-                entity_domain="spectrum", class_name="occupancy_change", severity="medium",
-                confidence=min(0.98, 0.60 + abs(occupancy_delta)),
-                explanation="A foglalt spektrumbinek aránya lényegesen megváltozott.",
-                start_frequency_hz=int(frequencies[0]), stop_frequency_hz=int(frequencies[-1]),
-                evidence={"current_occupancy": current_occupancy, "baseline_occupancy": baseline_occupancy,
-                          "delta": occupancy_delta, "baseline_source": baseline_source}, detected_at=detected_at,
-            ))
+        if abs(occupancy_delta) >= self.config.occupancy_change_fraction and self._emit_once(
+            "occupancy_change"
+        ):
+            detections.append(
+                Detection(
+                    entity_domain="spectrum",
+                    class_name="occupancy_change",
+                    severity="medium",
+                    confidence=min(0.98, 0.60 + abs(occupancy_delta)),
+                    explanation="A foglalt spektrumbinek aránya lényegesen megváltozott.",
+                    start_frequency_hz=int(frequencies[0]),
+                    stop_frequency_hz=int(frequencies[-1]),
+                    evidence={
+                        "current_occupancy": current_occupancy,
+                        "baseline_occupancy": baseline_occupancy,
+                        "delta": occupancy_delta,
+                        "baseline_source": baseline_source,
+                    },
+                    detected_at=detected_at,
+                )
+            )
 
         for start, stop in groups[:5]:
-            segment_delta = powers[start:stop + 1] - baseline[start:stop + 1]
+            segment_delta = powers[start : stop + 1] - baseline[start : stop + 1]
             peak_relative = int(np.argmax(segment_delta))
             peak_index = start + peak_relative
             bandwidth = max(int(round((stop - start + 1) * bin_hz)), int(round(bin_hz)))
@@ -239,25 +286,38 @@ class SpectrumAnomalyDetector:
             severity = "high" if delta_db >= 20 else "medium"
             key = f"new_peak:{round(center / max(bin_hz, 1))}"
             if self._emit_once(key):
-                detections.append(Detection(
-                    entity_domain="spectrum", class_name="new_peak_above_reference", severity=severity,
-                    confidence=min(0.995, 0.65 + delta_db / 60.0),
-                    explanation="Új spektrumcsúcs jelent meg a robusztus baseline felett.",
-                    start_frequency_hz=int(round(frequencies[start])),
-                    stop_frequency_hz=int(round(frequencies[stop])), center_frequency_hz=center,
-                    power_dbm=float(powers[peak_index]), bandwidth_hz=bandwidth,
-                    evidence={"delta_db": delta_db, "baseline_dbm": float(baseline[peak_index]),
-                              "robust_sigma_db": float(robust_sigma[peak_index]),
-                              "baseline_source": baseline_source, "source_type": source_type},
-                    detected_at=detected_at,
-                ))
+                detections.append(
+                    Detection(
+                        entity_domain="spectrum",
+                        class_name="new_peak_above_reference",
+                        severity=severity,
+                        confidence=min(0.995, 0.65 + delta_db / 60.0),
+                        explanation="Új spektrumcsúcs jelent meg a robusztus baseline felett.",
+                        start_frequency_hz=int(round(frequencies[start])),
+                        stop_frequency_hz=int(round(frequencies[stop])),
+                        center_frequency_hz=center,
+                        power_dbm=float(powers[peak_index]),
+                        bandwidth_hz=bandwidth,
+                        evidence={
+                            "delta_db": delta_db,
+                            "baseline_dbm": float(baseline[peak_index]),
+                            "robust_sigma_db": float(robust_sigma[peak_index]),
+                            "baseline_source": baseline_source,
+                            "source_type": source_type,
+                        },
+                        detected_at=detected_at,
+                    )
+                )
 
         dominant_index = int(np.argmax(powers))
         dominant_hz = int(round(frequencies[dominant_index]))
         dominant_power = float(powers[dominant_index])
         active = powers > current_floor + self.config.peak_delta_db
         active_groups = self._groups(active)
-        dominant_group = next((group for group in active_groups if group[0] <= dominant_index <= group[1]), (dominant_index, dominant_index))
+        dominant_group = next(
+            (group for group in active_groups if group[0] <= dominant_index <= group[1]),
+            (dominant_index, dominant_index),
+        )
         dominant_bandwidth = max(
             int(round((dominant_group[1] - dominant_group[0] + 1) * bin_hz)), int(round(bin_hz))
         )
@@ -271,40 +331,77 @@ class SpectrumAnomalyDetector:
                 and len(set(self._dominant_history)) == 1
                 and self._emit_once(f"persistent:{bucket}")
             ):
-                detections.append(Detection(
-                    entity_domain="spectrum", class_name="persistent_narrowband", severity="medium",
-                    confidence=0.86, explanation="Keskenysávú csúcs több egymást követő frame-ben fennmaradt.",
-                    center_frequency_hz=dominant_hz, power_dbm=dominant_power,
-                    bandwidth_hz=dominant_bandwidth,
-                    start_frequency_hz=int(round(frequencies[dominant_group[0]])),
-                    stop_frequency_hz=int(round(frequencies[dominant_group[1]])),
-                    evidence={"persistence_frames": self.config.persistence_frames,
-                              "noise_floor_dbm": current_floor}, detected_at=detected_at,
-                ))
-            if self._last_bandwidth_hz and min(self._last_bandwidth_hz, dominant_bandwidth) > 0:
-                ratio = max(self._last_bandwidth_hz, dominant_bandwidth) / min(self._last_bandwidth_hz, dominant_bandwidth)
-                if ratio >= self.config.bandwidth_ratio_change and self._emit_once("bandwidth_change"):
-                    detections.append(Detection(
-                        entity_domain="spectrum", class_name="unexpected_bandwidth_change", severity="medium",
-                        confidence=min(0.98, 0.62 + ratio / 20.0),
-                        explanation="A domináns jel becsült sávszélessége hirtelen megváltozott.",
-                        center_frequency_hz=dominant_hz, power_dbm=dominant_power,
+                detections.append(
+                    Detection(
+                        entity_domain="spectrum",
+                        class_name="persistent_narrowband",
+                        severity="medium",
+                        confidence=0.86,
+                        explanation="Keskenysávú csúcs több egymást követő frame-ben fennmaradt.",
+                        center_frequency_hz=dominant_hz,
+                        power_dbm=dominant_power,
                         bandwidth_hz=dominant_bandwidth,
-                        evidence={"previous_bandwidth_hz": self._last_bandwidth_hz,
-                                  "current_bandwidth_hz": dominant_bandwidth, "ratio": ratio},
+                        start_frequency_hz=int(round(frequencies[dominant_group[0]])),
+                        stop_frequency_hz=int(round(frequencies[dominant_group[1]])),
+                        evidence={
+                            "persistence_frames": self.config.persistence_frames,
+                            "noise_floor_dbm": current_floor,
+                        },
                         detected_at=detected_at,
-                    ))
+                    )
+                )
+            if self._last_bandwidth_hz and min(self._last_bandwidth_hz, dominant_bandwidth) > 0:
+                ratio = max(self._last_bandwidth_hz, dominant_bandwidth) / min(
+                    self._last_bandwidth_hz, dominant_bandwidth
+                )
+                if ratio >= self.config.bandwidth_ratio_change and self._emit_once(
+                    "bandwidth_change"
+                ):
+                    detections.append(
+                        Detection(
+                            entity_domain="spectrum",
+                            class_name="unexpected_bandwidth_change",
+                            severity="medium",
+                            confidence=min(0.98, 0.62 + ratio / 20.0),
+                            explanation=(
+                                "A domináns jel becsült sávszélessége hirtelen megváltozott."
+                            ),
+                            center_frequency_hz=dominant_hz,
+                            power_dbm=dominant_power,
+                            bandwidth_hz=dominant_bandwidth,
+                            evidence={
+                                "previous_bandwidth_hz": self._last_bandwidth_hz,
+                                "current_bandwidth_hz": dominant_bandwidth,
+                                "ratio": ratio,
+                            },
+                            detected_at=detected_at,
+                        )
+                    )
             if self._last_dominant_hz is not None:
                 drift = abs(dominant_hz - self._last_dominant_hz)
-                if drift >= max(int(round(3 * bin_hz)), self.config.narrowband_max_hz) and self._emit_once("frequency_drift"):
-                    detections.append(Detection(
-                        entity_domain="spectrum", class_name="frequency_drift", severity="low",
-                        confidence=0.74, explanation="A domináns keskenysávú energia más frekvenciára vándorolt.",
-                        center_frequency_hz=dominant_hz, power_dbm=dominant_power,
-                        bandwidth_hz=dominant_bandwidth,
-                        evidence={"previous_frequency_hz": self._last_dominant_hz,
-                                  "current_frequency_hz": dominant_hz, "drift_hz": drift}, detected_at=detected_at,
-                    ))
+                if drift >= max(
+                    int(round(3 * bin_hz)), self.config.narrowband_max_hz
+                ) and self._emit_once("frequency_drift"):
+                    detections.append(
+                        Detection(
+                            entity_domain="spectrum",
+                            class_name="frequency_drift",
+                            severity="low",
+                            confidence=0.74,
+                            explanation=(
+                                "A domináns keskenysávú energia más frekvenciára vándorolt."
+                            ),
+                            center_frequency_hz=dominant_hz,
+                            power_dbm=dominant_power,
+                            bandwidth_hz=dominant_bandwidth,
+                            evidence={
+                                "previous_frequency_hz": self._last_dominant_hz,
+                                "current_frequency_hz": dominant_hz,
+                                "drift_hz": drift,
+                            },
+                            detected_at=detected_at,
+                        )
+                    )
         else:
             self._dominant_history.clear()
 
@@ -312,16 +409,27 @@ class SpectrumAnomalyDetector:
             previous = self._powers[-1]
             previous_delta = powers - previous
             max_delta_index = int(np.argmax(previous_delta))
-            if previous_delta[max_delta_index] >= self.config.peak_delta_db * 1.5 and self._emit_once("burst"):
-                detections.append(Detection(
-                    entity_domain="spectrum", class_name="short_burst", severity="medium",
-                    confidence=min(0.95, 0.65 + float(previous_delta[max_delta_index]) / 60.0),
-                    explanation="Rövid, az előző frame-ben nem jelen lévő energialöket jelent meg.",
-                    center_frequency_hz=int(round(frequencies[max_delta_index])),
-                    power_dbm=float(powers[max_delta_index]), bandwidth_hz=int(round(bin_hz)),
-                    evidence={"frame_to_frame_delta_db": float(previous_delta[max_delta_index])},
-                    detected_at=detected_at,
-                ))
+            if previous_delta[
+                max_delta_index
+            ] >= self.config.peak_delta_db * 1.5 and self._emit_once("burst"):
+                detections.append(
+                    Detection(
+                        entity_domain="spectrum",
+                        class_name="short_burst",
+                        severity="medium",
+                        confidence=min(0.95, 0.65 + float(previous_delta[max_delta_index]) / 60.0),
+                        explanation=(
+                            "Rövid, az előző frame-ben nem jelen lévő energialöket jelent meg."
+                        ),
+                        center_frequency_hz=int(round(frequencies[max_delta_index])),
+                        power_dbm=float(powers[max_delta_index]),
+                        bandwidth_hz=int(round(bin_hz)),
+                        evidence={
+                            "frame_to_frame_delta_db": float(previous_delta[max_delta_index])
+                        },
+                        detected_at=detected_at,
+                    )
+                )
 
         self._last_dominant_hz = dominant_hz if signal_present else None
         self._last_bandwidth_hz = dominant_bandwidth if signal_present else None

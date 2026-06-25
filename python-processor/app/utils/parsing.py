@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 MAC_RE = re.compile(r"(?i)\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b")
 
+
 def normalize_key(key: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", key.strip().lower())
 
@@ -137,11 +138,15 @@ def parse_kismet_upload(
             [payload],
         )
     else:
-        raise HTTPException(status_code=400, detail="A Kismet JSON objektumot vagy listat kell tartalmazzon.")
+        raise HTTPException(
+            status_code=400, detail="A Kismet JSON objektumot vagy listat kell tartalmazzon."
+        )
 
     rows = [dict(value) for value in values if isinstance(value, dict)]
     if not rows:
-        raise HTTPException(status_code=400, detail="A Kismet JSON nem tartalmaz importalhato objektumot.")
+        raise HTTPException(
+            status_code=400, detail="A Kismet JSON nem tartalmaz importalhato objektumot."
+        )
     return rows, 1, "json"
 
 
@@ -163,7 +168,9 @@ def parse_bettercap_upload(
     try:
         payload = json.loads(file_bytes.decode("utf-8-sig"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=400, detail=f"A Bettercap BLE JSON nem olvashato: {exc}") from exc
+        raise HTTPException(
+            status_code=400, detail=f"A Bettercap BLE JSON nem olvashato: {exc}"
+        ) from exc
 
     if isinstance(payload, list):
         values = payload
@@ -354,7 +361,9 @@ def bluetooth_identity_metadata(
     if not mac:
         return {"stable_identity": None, "identity_confidence": "unknown"}
     address_text = (address_type or "").lower()
-    is_private = any(token in address_text for token in ("random", "private", "resolvable", "non-resolvable"))
+    is_private = any(
+        token in address_text for token in ("random", "private", "resolvable", "non-resolvable")
+    )
     if not is_private and not mac_is_locally_administered(mac):
         return {"stable_identity": mac, "identity_confidence": "high"}
 
@@ -366,9 +375,13 @@ def bluetooth_identity_metadata(
         "address_type": address_type or "",
         "bluetooth_type": bluetooth_type or "",
     }
-    has_strong_fingerprint = bool(company_id or manufacturer_hash or fingerprint_parts["service_uuids"])
+    has_strong_fingerprint = bool(
+        company_id or manufacturer_hash or fingerprint_parts["service_uuids"]
+    )
     digest = hashlib.sha256(
-        json.dumps(fingerprint_parts, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        json.dumps(fingerprint_parts, sort_keys=True, separators=(",", ":"), default=str).encode(
+            "utf-8"
+        )
     ).hexdigest()
     return {
         "stable_identity": f"blefp:{digest}",
@@ -394,7 +407,11 @@ def bluetooth_vendor_metadata(
         }
     if vendor:
         lowered_address_type = (address_type or "").lower()
-        confidence = "low" if any(token in lowered_address_type for token in ("random", "private", "resolvable")) else "medium"
+        confidence = (
+            "low"
+            if any(token in lowered_address_type for token in ("random", "private", "resolvable"))
+            else "medium"
+        )
         return {
             "vendor": vendor,
             "vendor_resolution_method": source,
@@ -488,7 +505,13 @@ def normalize_bettercap_row(row: dict[str, Any], fallback_time: datetime) -> dic
         source="bettercap",
         address_type=address_type,
         company_id=parse_bluetooth_company_id(
-            row_get(flattened, "company_id", "company_identifier", "bluetooth_company_id", "data.company_id")
+            row_get(
+                flattened,
+                "company_id",
+                "company_identifier",
+                "bluetooth_company_id",
+                "data.company_id",
+            )
             or manufacturer_data
         ),
         manufacturer_hash=manufacturer_data_hash(manufacturer_data),
@@ -617,7 +640,8 @@ def normalize_wifi_device_type(row: dict[str, Any]) -> str:
         )
     ]
     candidates.extend(
-        value for key, value in flattened.items()
+        value
+        for key, value in flattened.items()
         if any(token in str(key).lower() for token in ("type", "role"))
     )
     text = " ".join(str(value).lower() for value in candidates if value not in (None, ""))
@@ -625,10 +649,9 @@ def normalize_wifi_device_type(row: dict[str, Any]) -> str:
         return "bridge/mesh"
     if any(token in text for token in ("ad-hoc", "adhoc", "ibss")):
         return "ad-hoc"
-    if (
-        any(token in text for token in ("access point", "base station", "infrastructure"))
-        or re.search(r"\bap\b", text)
-    ):
+    if any(
+        token in text for token in ("access point", "base station", "infrastructure")
+    ) or re.search(r"\bap\b", text):
         return "AP"
     if any(token in text for token in ("client", "station", " sta", "probe")):
         return "client"
@@ -731,9 +754,7 @@ def normalize_kismet_row(row: dict[str, Any], fallback_time: datetime) -> dict[s
                 "noise",
             )
         ),
-        "encryption": kismet_text(
-            row_get(flattened, "encryption", "security", "privacy", "crypt")
-        ),
+        "encryption": kismet_text(row_get(flattened, "encryption", "security", "privacy", "crypt")),
         "vendor": kismet_text(
             row_get(flattened, "vendor", "manufacturer", "manuf", "kismet.device.base.manuf")
         ),
@@ -749,28 +770,34 @@ def normalize_kismet_row(row: dict[str, Any], fallback_time: datetime) -> dict[s
     }
 
 
-
-
 def is_kismet_bluetooth_row(row: dict[str, Any]) -> bool:
     flattened = flatten_kismet_row(row)
-    phy_name = str(
-        row_get(
-            flattened,
-            "kismet.device.base.phyname",
-            "phyname",
-            "phy",
+    phy_name = (
+        str(
+            row_get(
+                flattened,
+                "kismet.device.base.phyname",
+                "phyname",
+                "phy",
+            )
+            or ""
         )
-        or ""
-    ).lower().strip()
-    device_type = str(
-        row_get(
-            flattened,
-            "kismet.device.base.type",
-            "type",
-            "device_type",
+        .lower()
+        .strip()
+    )
+    device_type = (
+        str(
+            row_get(
+                flattened,
+                "kismet.device.base.type",
+                "type",
+                "device_type",
+            )
+            or ""
         )
-        or ""
-    ).lower().strip()
+        .lower()
+        .strip()
+    )
 
     # The projected Kismet POST response includes requested Bluetooth fields as
     # zero-valued placeholders on Wi-Fi rows. An explicit Wi-Fi PHY/type must
@@ -909,15 +936,18 @@ def normalize_kismet_bluetooth_row(row: dict[str, Any], fallback_time: datetime)
             "bluetooth.device.services",
         )
     )
-    bluetooth_type = kismet_text(
-        row_get(
-            flattened,
-            "bluetooth_type",
-            "kismet.device.base.type",
-            "bluetooth.device.type",
-            "kismet.device.base.phyname",
+    bluetooth_type = (
+        kismet_text(
+            row_get(
+                flattened,
+                "bluetooth_type",
+                "kismet.device.base.type",
+                "bluetooth.device.type",
+                "kismet.device.base.phyname",
+            )
         )
-    ) or "bluetooth"
+        or "bluetooth"
+    )
     identity_meta = bluetooth_identity_metadata(
         mac=mac,
         device_name=device_name,
@@ -1023,22 +1053,27 @@ def normalize_wifi_management_frame_type(value: Any) -> str | None:
 
 def normalize_kismet_alert_row(row: dict[str, Any], fallback_time: datetime) -> dict[str, Any]:
     flattened = flatten_kismet_row(row)
-    observed_at = parse_datetime_value(
-        row_get(
-            flattened,
-            "timestamp",
-            "time",
-            "first_time",
-            "last_time",
-            "kismet.alert.timestamp",
-            "kismet.alert.time",
-            "kismet.alert.last_time",
+    observed_at = (
+        parse_datetime_value(
+            row_get(
+                flattened,
+                "timestamp",
+                "time",
+                "first_time",
+                "last_time",
+                "kismet.alert.timestamp",
+                "kismet.alert.time",
+                "kismet.alert.last_time",
+            )
         )
-    ) or fallback_time
+        or fallback_time
+    )
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=timezone.utc)
 
-    raw_severity = str(row_get(flattened, "severity", "priority", "kismet.alert.severity") or "").lower()
+    raw_severity = str(
+        row_get(flattened, "severity", "priority", "kismet.alert.severity") or ""
+    ).lower()
     if raw_severity in {"critical", "crit", "5"}:
         severity = "critical"
     elif raw_severity in {"error", "err", "high", "4"}:
@@ -1048,12 +1083,33 @@ def normalize_kismet_alert_row(row: dict[str, Any], fallback_time: datetime) -> 
     else:
         severity = "info"
 
-    alert_type = kismet_text(
-        row_get(flattened, "alert_type", "type", "class", "code", "kismet.alert.class", "kismet.alert.alert")
-    ) or "kismet_alert"
-    message = kismet_text(
-        row_get(flattened, "message", "description", "text", "kismet.alert.text", "kismet.alert.message")
-    ) or alert_type
+    alert_type = (
+        kismet_text(
+            row_get(
+                flattened,
+                "alert_type",
+                "type",
+                "class",
+                "code",
+                "kismet.alert.class",
+                "kismet.alert.alert",
+            )
+        )
+        or "kismet_alert"
+    )
+    message = (
+        kismet_text(
+            row_get(
+                flattened,
+                "message",
+                "description",
+                "text",
+                "kismet.alert.text",
+                "kismet.alert.message",
+            )
+        )
+        or alert_type
+    )
     source_mac = parse_mac(
         row_get(flattened, "source_mac", "src_mac", "transmitter_mac", "kismet.alert.source_mac")
     )
@@ -1064,7 +1120,9 @@ def normalize_kismet_alert_row(row: dict[str, Any], fallback_time: datetime) -> 
     frame_type = kismet_text(row_get(flattened, "frame_type", "management_frame_type", "subtype"))
     reason_code = parse_int(row_get(flattened, "reason_code", "reason"))
     channel = parse_int(row_get(flattened, "channel", "chan"))
-    frequency_hz = parse_kismet_frequency_hz(row_get(flattened, "frequency_hz", "frequency", "freq"))
+    frequency_hz = parse_kismet_frequency_hz(
+        row_get(flattened, "frequency_hz", "frequency", "freq")
+    )
     rssi_dbm = parse_kismet_dbm(row_get(flattened, "rssi_dbm", "signal_dbm", "signal", "rssi"))
     confidence = kismet_text(row_get(flattened, "confidence", "kismet.alert.confidence")) or "low"
     event_count = parse_int(row_get(flattened, "count", "event_count", "kismet.alert.count"))

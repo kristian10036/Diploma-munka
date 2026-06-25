@@ -6,7 +6,6 @@ import pytest
 
 from scripts.check_release_package import find_release_package_issues
 
-
 pytestmark = pytest.mark.unit
 
 

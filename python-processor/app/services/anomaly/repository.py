@@ -59,7 +59,8 @@ def _persist_sync(envelope: SpectrumEnvelope, detections: list[Detection]) -> No
                 suppression_reason = None
                 matches: list[dict[str, Any]] = []
                 measurement = {
-                    "center_frequency_hz": detection.center_frequency_hz or detection.start_frequency_hz,
+                    "center_frequency_hz": detection.center_frequency_hz
+                    or detection.start_frequency_hz,
                     "bandwidth_hz": detection.bandwidth_hz,
                     "power_dbm": detection.power_dbm,
                     "source_type": envelope.source_type,
@@ -117,11 +118,9 @@ def _persist_sync(envelope: SpectrumEnvelope, detections: list[Detection]) -> No
                     ),
                 )
                 detection_id = str(cur.fetchone()["id"])
-                if (
-                    suppression_reason is None
-                    and _SEVERITY_RANK.get(detection.severity, 0)
-                    >= _SEVERITY_RANK.get(_ALERT_THRESHOLD, 3)
-                ):
+                if suppression_reason is None and _SEVERITY_RANK.get(
+                    detection.severity, 0
+                ) >= _SEVERITY_RANK.get(_ALERT_THRESHOLD, 3):
                     alert_severity = _SEVERITY_TO_ALERT.get(detection.severity, "warning")
                     domain = {
                         "spectrum": "rf_security",
@@ -136,7 +135,8 @@ def _persist_sync(envelope: SpectrumEnvelope, detections: list[Detection]) -> No
                           (severity, status, source, code, message, entity_type, entity_id,
                            metadata, domain, deduplication_key, occurrence_count,
                            last_seen_at, rf_detection_id, measurement_session_id, updated_at)
-                        VALUES (%s,'open','anomaly_pipeline',%s,%s,'rf_detection',%s,%s,%s,%s,1,now(),%s,%s,now())
+                        VALUES (%s,'open','anomaly_pipeline',%s,%s,'rf_detection',%s,%s,%s,%s,
+                                1,now(),%s,%s,now())
                         ON CONFLICT (deduplication_key)
                           WHERE deduplication_key IS NOT NULL AND status IN ('open','acknowledged')
                         DO UPDATE SET
@@ -153,7 +153,9 @@ def _persist_sync(envelope: SpectrumEnvelope, detections: list[Detection]) -> No
                             detection.class_name,
                             detection.explanation,
                             detection_id,
-                            Jsonb({"evidence": detection.evidence, "confidence": detection.confidence}),
+                            Jsonb(
+                                {"evidence": detection.evidence, "confidence": detection.confidence}
+                            ),
                             domain,
                             dedup,
                             detection_id,

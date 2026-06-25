@@ -2,7 +2,12 @@ import os
 import unittest
 from unittest.mock import patch
 
-from app.rf_agent_client import RfAgentSettings, RfAgentUnavailable, request_rf_agent, rf_agent_status
+from app.rf_agent_client import (
+    RfAgentSettings,
+    RfAgentUnavailable,
+    request_rf_agent,
+    rf_agent_status,
+)
 
 
 class RfAgentClientTest(unittest.TestCase):
@@ -15,11 +20,14 @@ class RfAgentClientTest(unittest.TestCase):
             request_rf_agent(settings, "/status")
 
     def test_environment_is_bounded(self):
-        with patch.dict(os.environ, {
-            "RF_AGENT_INTEGRATION_ENABLED": "true",
-            "RF_AGENT_URL": "http://localhost:9876/",
-            "RF_AGENT_TIMEOUT_SECONDS": "999",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "RF_AGENT_INTEGRATION_ENABLED": "true",
+                "RF_AGENT_URL": "http://localhost:9876/",
+                "RF_AGENT_TIMEOUT_SECONDS": "999",
+            },
+        ):
             settings = RfAgentSettings.from_env()
         self.assertTrue(settings.enabled)
         self.assertEqual(settings.base_url, "http://localhost:9876")

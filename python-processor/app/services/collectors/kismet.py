@@ -9,7 +9,6 @@ from urllib.request import Request, urlopen
 
 from app.config import KismetSettings
 
-
 KISMET_DEVICE_FIELDS: list[Any] = [
     "kismet.device.base.macaddr",
     "kismet.device.base.name",

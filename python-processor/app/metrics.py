@@ -22,7 +22,8 @@ SPECTRUM_FRAMES_TOTAL = Counter(
     "dm_spectrum_frames_total", "Spectrum frames produced by the backend source", ("source_mode",)
 )
 SPECTRUM_FRAME_POINTS = Histogram(
-    "dm_spectrum_frame_points", "Number of points in backend spectrum frames",
+    "dm_spectrum_frame_points",
+    "Number of points in backend spectrum frames",
     buckets=(16, 64, 128, 256, 512, 1024, 4096, 16384, 65536, 131072),
 )
 SPECTRUM_SOURCE_ERRORS_TOTAL = Counter(
@@ -38,7 +39,8 @@ REFERENCE_IMPORTS_TOTAL = Counter(
     "dm_reference_imports_total", "Versioned reference imports", ("format", "result")
 )
 REFERENCE_IMPORTED_POINTS = Histogram(
-    "dm_reference_imported_points", "Points retained after reference import and resampling",
+    "dm_reference_imported_points",
+    "Points retained after reference import and resampling",
     buckets=(2, 10, 100, 1000, 10000, 65536, 100000),
 )
 
@@ -46,7 +48,9 @@ RECORDING_BYTES_TOTAL = Counter(
     "dm_recording_bytes_total", "Bytes finalized by backend recording writers", ("recording_type",)
 )
 RECORDING_ITEMS_TOTAL = Counter(
-    "dm_recordings_finalized_total", "Recordings finalized by backend writers", ("recording_type", "result")
+    "dm_recordings_finalized_total",
+    "Recordings finalized by backend writers",
+    ("recording_type", "result"),
 )
 RECORDING_DISK_FREE_BYTES = Gauge(
     "dm_recording_disk_free_bytes", "Free bytes on the recording filesystem"
@@ -66,9 +70,7 @@ SDRANGEL_IQ_PACKET_LOSS = Gauge(
 SDRANGEL_IQ_RECONNECTS = Gauge(
     "dm_sdrangel_iq_reconnects", "Reconnect attempts by the SDRangel IQ data plane"
 )
-ANOMALY_QUEUE_DEPTH = Gauge(
-    "dm_anomaly_queue_depth", "Current online anomaly pipeline queue depth"
-)
+ANOMALY_QUEUE_DEPTH = Gauge("dm_anomaly_queue_depth", "Current online anomaly pipeline queue depth")
 ANOMALY_QUEUE_DROPS = Gauge(
     "dm_anomaly_queue_dropped_frames", "Spectrum frames dropped by the anomaly queue"
 )
@@ -79,23 +81,23 @@ ANOMALY_INFERENCE_SECONDS = Histogram(
     "dm_anomaly_inference_seconds", "Rule/statistical anomaly processing latency"
 )
 RECORDING_FRAMES_TOTAL = Counter(
-    "dm_recording_frames_total", "Frames or samples finalized by recording writers", ("recording_type",)
+    "dm_recording_frames_total",
+    "Frames or samples finalized by recording writers",
+    ("recording_type",),
 )
 ML_INFERENCE_SECONDS = Histogram(
-    "dm_ml_inference_seconds", "Online rule/statistical or trained-model inference latency", ("pipeline",)
+    "dm_ml_inference_seconds",
+    "Online rule/statistical or trained-model inference latency",
+    ("pipeline",),
 )
-ML_QUEUE_DEPTH = Gauge(
-    "dm_ml_queue_depth", "Current online analysis queue depth", ("pipeline",)
-)
+ML_QUEUE_DEPTH = Gauge("dm_ml_queue_depth", "Current online analysis queue depth", ("pipeline",))
 ML_QUEUE_DROPS = Gauge(
     "dm_ml_queue_dropped_frames", "Frames dropped by online analysis queues", ("pipeline",)
 )
 COLLECTOR_STATUS = Gauge(
     "dm_collector_available", "Collector availability (1 available, 0 unavailable)", ("collector",)
 )
-ALERTS_OPEN = Gauge(
-    "dm_alerts_open", "Open or acknowledged alerts", ("severity",)
-)
+ALERTS_OPEN = Gauge("dm_alerts_open", "Open or acknowledged alerts", ("severity",))
 
 
 def _normalized_path(request: Request) -> str:

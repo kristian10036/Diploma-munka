@@ -5,7 +5,6 @@ import urllib.request
 
 import pytest
 
-
 BASE_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
 pytestmark = pytest.mark.integration
 
@@ -32,7 +31,9 @@ def test_ml_api_contract() -> None:
     status, registry = request("/api/ml/models")
     assert status == 200 and len(registry["models"]) == 3
     assert {model["model_type"] for model in registry["models"]} == {
-        "rule_based_baseline", "classical_ml", "cnn"
+        "rule_based_baseline",
+        "classical_ml",
+        "cnn",
     }
 
     powers = [-95.0] * 101

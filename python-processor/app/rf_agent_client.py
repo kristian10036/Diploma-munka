@@ -23,7 +23,10 @@ class RfAgentSettings:
     @classmethod
     def from_env(cls) -> "RfAgentSettings":
         enabled = os.getenv("RF_AGENT_INTEGRATION_ENABLED", "true").strip().lower() in {
-            "1", "true", "yes", "on"
+            "1",
+            "true",
+            "yes",
+            "on",
         }
         try:
             timeout = max(0.5, min(30.0, float(os.getenv("RF_AGENT_TIMEOUT_SECONDS", "3"))))

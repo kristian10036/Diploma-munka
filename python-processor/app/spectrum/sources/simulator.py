@@ -54,4 +54,3 @@ class SimulatorSpectrumSource(SpectrumSource):
             source_mode=self.mode,
             points=points,
         )
-

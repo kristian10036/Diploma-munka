@@ -47,7 +47,9 @@ class BettercapCollector:
                 "enabled": False,
                 "ble_enabled": self.settings.ble_enabled,
                 "status": "disabled",
-                "message": "Bettercap live integration disabled. Passive file import is still available.",
+                "message": (
+                    "Bettercap live integration disabled. Passive file import is still available."
+                ),
                 "url": self.settings.api_url,
                 "ble_interface": self.settings.ble_interface,
                 "reachable": None,

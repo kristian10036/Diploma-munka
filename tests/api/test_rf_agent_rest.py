@@ -5,7 +5,6 @@ import urllib.request
 
 import pytest
 
-
 BASE_URL = os.environ.get("RF_AGENT_URL", "http://127.0.0.1:8765").rstrip("/")
 pytestmark = pytest.mark.integration
 
@@ -71,32 +70,53 @@ def test_rf_agent_rest_contract() -> None:
 
 def test_rf_agent_viewport_contract() -> None:
     status, capabilities = request("/capabilities")
-    assert status == 200 and "viewport_control" in capabilities and "maximum_spectrum_points" in capabilities
+    assert (
+        status == 200
+        and "viewport_control" in capabilities
+        and "maximum_spectrum_points" in capabilities
+    )
 
-    status, invalid = request("/source/viewport", "POST", {
-        "request_id": "contract-test-invalid",
-        "mode": "continuous",
-        "center_frequency_hz": 433920000,
-        "span_hz": 2000000,
-        "maximum_points": 4800,
-    })
+    status, invalid = request(
+        "/source/viewport",
+        "POST",
+        {
+            "request_id": "contract-test-invalid",
+            "mode": "continuous",
+            "center_frequency_hz": 433920000,
+            "span_hz": 2000000,
+            "maximum_points": 4800,
+        },
+    )
     assert status == 422
     assert invalid["error"]["code"] == "INVALID_VIEWPORT_REQUEST"
 
-    status, result = request("/source/viewport", "POST", {
-        "request_id": "contract-test-valid",
-        "mode": "sweep",
-        "center_frequency_hz": 433920000,
-        "span_hz": 2000000,
-        "maximum_points": 4800,
-    })
+    status, result = request(
+        "/source/viewport",
+        "POST",
+        {
+            "request_id": "contract-test-valid",
+            "mode": "sweep",
+            "center_frequency_hz": 433920000,
+            "span_hz": 2000000,
+            "maximum_points": 4800,
+        },
+    )
     if capabilities["viewport_control"]:
         assert status == 200
         assert result["status"] in {"accepted", "constrained"}
         assert set(result) >= {
-            "schema_version", "request_id", "status", "mode", "center_frequency_hz",
-            "span_hz", "start_frequency_hz", "stop_frequency_hz", "step_frequency_hz",
-            "num_points", "source_type", "hardware_execution",
+            "schema_version",
+            "request_id",
+            "status",
+            "mode",
+            "center_frequency_hz",
+            "span_hz",
+            "start_frequency_hz",
+            "stop_frequency_hz",
+            "step_frequency_hz",
+            "num_points",
+            "source_type",
+            "hardware_execution",
         }
         assert result["num_points"] <= capabilities["maximum_spectrum_points"]
     else:

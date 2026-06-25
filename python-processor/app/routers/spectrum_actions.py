@@ -17,9 +17,17 @@ router = APIRouter()
 REFERENCE_KEY_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 
 _SPECTRUM_PEAK_FIELDS = [
-    "id", "time", "session_id", "session_title", "location_name",
-    "peak_type", "frequency_hz", "power_dbm", "metadata",
+    "id",
+    "time",
+    "session_id",
+    "session_title",
+    "location_name",
+    "peak_type",
+    "frequency_hz",
+    "power_dbm",
+    "metadata",
 ]
+
 
 @router.post("/api/spectrum/reference-captures")
 def save_reference_capture(request: ReferenceCaptureRequest):
@@ -44,9 +52,13 @@ def save_reference_capture(request: ReferenceCaptureRequest):
     if not normalized_points:
         raise HTTPException(status_code=400, detail="Nincs mentheto spektrum pont.")
     frequencies = [item[0] for item in normalized_points]
-    differences = {frequencies[index] - frequencies[index - 1] for index in range(1, len(frequencies))}
+    differences = {
+        frequencies[index] - frequencies[index - 1] for index in range(1, len(frequencies))
+    }
     step = next(iter(differences)) if len(differences) == 1 else None
-    checksum_payload = json.dumps(normalized_points, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    checksum_payload = json.dumps(
+        normalized_points, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
     checksum = hashlib.sha256(checksum_payload).hexdigest()
     inserted = 0
     with get_db() as conn:
@@ -54,7 +66,8 @@ def save_reference_capture(request: ReferenceCaptureRequest):
             location_id = ensure_location(cur, request.location_name)
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (reference_key,))
             cur.execute(
-                "SELECT COALESCE(MAX(version), 0) + 1 AS version FROM spectrum_references WHERE reference_key=%s",
+                "SELECT COALESCE(MAX(version), 0) + 1 AS version FROM spectrum_references "
+                "WHERE reference_key=%s",
                 (reference_key,),
             )
             version = cur.fetchone()["version"]
@@ -94,7 +107,13 @@ def save_reference_capture(request: ReferenceCaptureRequest):
                     checksum,
                     request.source_file,
                     len(normalized_points),
-                    Jsonb({"layer_type": "reference", "display_color": "#ff5252", "source": "live_spectrum_capture"}),
+                    Jsonb(
+                        {
+                            "layer_type": "reference",
+                            "display_color": "#ff5252",
+                            "source": "live_spectrum_capture",
+                        }
+                    ),
                 ),
             )
             reference_uuid = str(cur.fetchone()["id"])
@@ -121,13 +140,15 @@ def save_reference_capture(request: ReferenceCaptureRequest):
                         request.vbw_hz,
                         request.antenna,
                         request.downconverter_profile,
-                        Jsonb({
-                            "source": "live_spectrum_capture",
-                            "reference_key": reference_key,
-                            "reference_version": version,
-                            "layer_type": "reference",
-                            "display_color": "#ff5252",
-                        }),
+                        Jsonb(
+                            {
+                                "source": "live_spectrum_capture",
+                                "reference_key": reference_key,
+                                "reference_version": version,
+                                "layer_type": "reference",
+                                "display_color": "#ff5252",
+                            }
+                        ),
                     ),
                 )
                 inserted += 1
@@ -222,7 +243,9 @@ def save_spectrum_peak(request: PeakSaveRequest):
 
 
 def _spectrum_peaks_query(
-    location_name: str | None, start_time: datetime | None, end_time: datetime | None,
+    location_name: str | None,
+    start_time: datetime | None,
+    end_time: datetime | None,
 ) -> tuple[str, list]:
     conditions: list[str] = []
     parameters: list = []

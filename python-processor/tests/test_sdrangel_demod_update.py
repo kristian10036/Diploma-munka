@@ -3,14 +3,14 @@
 A végpont csak proxy: a séma-validációt és a PATCH továbbítását ellenőrizzük,
 az RF-agent hívást mockoljuk (nem kell futó rf-agent).
 """
+
 import unittest
 from unittest.mock import patch
 
-from fastapi import HTTPException
-from pydantic import ValidationError
-
 from app.routers.rf_agent import update_sdrangel_demod
 from app.schemas import SdrangelDemodUpdateRequest
+from fastapi import HTTPException
+from pydantic import ValidationError
 
 VALID = {
     "device_set_index": 0,
@@ -32,7 +32,11 @@ class SdrangelDemodUpdateTest(unittest.TestCase):
             captured["path"] = path
             captured["method"] = method
             captured["body"] = body
-            return {"status": "ok", "channel_index": 2, "applied_settings": {"inputFrequencyOffset": 500000}}
+            return {
+                "status": "ok",
+                "channel_index": 2,
+                "applied_settings": {"inputFrequencyOffset": 500000},
+            }
 
         with patch("app.routers.rf_agent.request_rf_agent", side_effect=fake_proxy):
             response = update_sdrangel_demod(SdrangelDemodUpdateRequest(**VALID))

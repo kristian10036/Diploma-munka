@@ -27,7 +27,9 @@ def _csv_lines(fieldnames: list[str], rows: Iterable[dict[str, Any]]) -> Iterato
         yield buffer.getvalue()
 
 
-def csv_export_response(filename: str, fieldnames: list[str], rows: Iterable[dict[str, Any]]) -> StreamingResponse:
+def csv_export_response(
+    filename: str, fieldnames: list[str], rows: Iterable[dict[str, Any]]
+) -> StreamingResponse:
     return StreamingResponse(
         _csv_lines(fieldnames, rows),
         media_type="text/csv; charset=utf-8",

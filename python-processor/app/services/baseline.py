@@ -4,11 +4,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
-from psycopg.types.json import Jsonb
 
 PROTOCOLS = ("wifi", "bluetooth")
 COMPARISON_STATES = (
-    "known", "new", "changed", "missing", "uncertain_match", "ignored",
+    "known",
+    "new",
+    "changed",
+    "missing",
+    "uncertain_match",
+    "ignored",
 )
 
 
@@ -26,7 +30,9 @@ def _service_uuid_fingerprint(service_uuids: Any) -> str | None:
     return ",".join(values) if values else None
 
 
-def fetch_current_wifi_snapshot(cur, location_name: str, session_id: Any | None) -> list[dict[str, Any]]:
+def fetch_current_wifi_snapshot(
+    cur, location_name: str, session_id: Any | None
+) -> list[dict[str, Any]]:
     filters = ["o.bssid = d.bssid", "lower(o.location_name) = lower(%(location_name)s)"]
     params: dict[str, Any] = {"location_name": location_name}
     if session_id:
@@ -45,8 +51,10 @@ def fetch_current_wifi_snapshot(cur, location_name: str, session_id: Any | None)
           SELECT COUNT(*) AS observation_count,
                  MIN(COALESCE(o.signal_dbm, o.rssi_dbm)) AS rssi_min_dbm,
                  MAX(COALESCE(o.signal_dbm, o.rssi_dbm)) AS rssi_max_dbm,
-                 (ARRAY_AGG(o.channel ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_channel,
-                 (ARRAY_AGG(o.frequency_hz ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_frequency_hz
+                 (ARRAY_AGG(o.channel ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_channel,
+                 (ARRAY_AGG(o.frequency_hz ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_frequency_hz
           FROM wifi_observations o WHERE {where}
         ) stats ON TRUE
         WHERE EXISTS (SELECT 1 FROM wifi_observations o WHERE {where})
@@ -56,7 +64,9 @@ def fetch_current_wifi_snapshot(cur, location_name: str, session_id: Any | None)
     return list(cur.fetchall())
 
 
-def fetch_current_bluetooth_snapshot(cur, location_name: str, session_id: Any | None) -> list[dict[str, Any]]:
+def fetch_current_bluetooth_snapshot(
+    cur, location_name: str, session_id: Any | None
+) -> list[dict[str, Any]]:
     filters = ["o.mac_address = d.mac_address", "lower(o.location_name) = lower(%(location_name)s)"]
     params: dict[str, Any] = {"location_name": location_name}
     if session_id:
@@ -75,7 +85,8 @@ def fetch_current_bluetooth_snapshot(cur, location_name: str, session_id: Any | 
           SELECT COUNT(*) AS observation_count,
                  MIN(o.rssi_dbm) AS rssi_min_dbm,
                  MAX(o.rssi_dbm) AS rssi_max_dbm,
-                 (ARRAY_AGG(o.service_uuids ORDER BY COALESCE(o.observed_at, o.time) DESC))[1] AS latest_service_uuids
+                 (ARRAY_AGG(o.service_uuids ORDER BY COALESCE(o.observed_at, o.time) DESC))[1]
+                   AS latest_service_uuids
           FROM bluetooth_observations o WHERE {where}
         ) stats ON TRUE
         WHERE EXISTS (SELECT 1 FROM bluetooth_observations o WHERE {where})
@@ -109,7 +120,8 @@ def save_baseline(
         raise HTTPException(status_code=409, detail="no_current_devices_for_location")
 
     cur.execute(
-        "SELECT COALESCE(MAX(version), 0) AS max_version FROM device_baselines WHERE lower(location_name) = lower(%s) AND protocol = %s",
+        "SELECT COALESCE(MAX(version), 0) AS max_version FROM device_baselines "
+        "WHERE lower(location_name) = lower(%s) AND protocol = %s",
         (cleaned_location, protocol),
     )
     next_version = (cur.fetchone()["max_version"] or 0) + 1
@@ -131,19 +143,34 @@ def save_baseline(
                 INSERT INTO device_baselines
                   (location_id, location_name, protocol, stable_identity, identity_confidence,
                    mac_address, vendor, device_type, ssid, encryption,
-                   typical_channel, typical_frequency_hz, typical_rssi_min_dbm, typical_rssi_max_dbm,
+                   typical_channel, typical_frequency_hz, typical_rssi_min_dbm,
+                   typical_rssi_max_dbm,
                    first_seen, last_seen, notes, version, is_active, created_by,
                    reference_set_id, source_measurement_session_id)
-                VALUES (%s, %s, 'wifi', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s, %s)
+                VALUES (%s, %s, 'wifi', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, true, %s, %s, %s)
                 """,
                 (
-                    location_id, cleaned_location, stable_identity, device.get("identity_confidence") or "unknown",
-                    device.get("mac_address"), device.get("vendor"), device.get("device_type"),
-                    device.get("ssid"), device.get("encryption"),
-                    device.get("latest_channel"), device.get("latest_frequency_hz"),
-                    device.get("rssi_min_dbm"), device.get("rssi_max_dbm"),
-                    device.get("first_seen"), device.get("last_seen"), notes, next_version, operator,
-                    reference_set_id, session_id,
+                    location_id,
+                    cleaned_location,
+                    stable_identity,
+                    device.get("identity_confidence") or "unknown",
+                    device.get("mac_address"),
+                    device.get("vendor"),
+                    device.get("device_type"),
+                    device.get("ssid"),
+                    device.get("encryption"),
+                    device.get("latest_channel"),
+                    device.get("latest_frequency_hz"),
+                    device.get("rssi_min_dbm"),
+                    device.get("rssi_max_dbm"),
+                    device.get("first_seen"),
+                    device.get("last_seen"),
+                    notes,
+                    next_version,
+                    operator,
+                    reference_set_id,
+                    session_id,
                 ),
             )
         else:
@@ -155,19 +182,39 @@ def save_baseline(
                    manufacturer_data_hash, typical_rssi_min_dbm, typical_rssi_max_dbm,
                    first_seen, last_seen, notes, version, is_active, created_by, device_type,
                    reference_set_id, source_measurement_session_id)
-                VALUES (%s, %s, 'bluetooth', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s, %s, %s)
+                VALUES (%s, %s, 'bluetooth', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, true, %s, %s, %s, %s)
                 """,
                 (
-                    location_id, cleaned_location, stable_identity, device.get("identity_confidence") or "unknown",
-                    device.get("mac_address"), device.get("device_name"), device.get("vendor"),
-                    device.get("bluetooth_company_id"), _service_uuid_fingerprint(device.get("latest_service_uuids")),
-                    device.get("manufacturer_data_hash"), device.get("rssi_min_dbm"), device.get("rssi_max_dbm"),
-                    device.get("first_seen"), device.get("last_seen"), notes, next_version, operator,
-                    device.get("bluetooth_type"), reference_set_id, session_id,
+                    location_id,
+                    cleaned_location,
+                    stable_identity,
+                    device.get("identity_confidence") or "unknown",
+                    device.get("mac_address"),
+                    device.get("device_name"),
+                    device.get("vendor"),
+                    device.get("bluetooth_company_id"),
+                    _service_uuid_fingerprint(device.get("latest_service_uuids")),
+                    device.get("manufacturer_data_hash"),
+                    device.get("rssi_min_dbm"),
+                    device.get("rssi_max_dbm"),
+                    device.get("first_seen"),
+                    device.get("last_seen"),
+                    notes,
+                    next_version,
+                    operator,
+                    device.get("bluetooth_type"),
+                    reference_set_id,
+                    session_id,
                 ),
             )
         saved += 1
-    return {"protocol": protocol, "location_name": cleaned_location, "version": next_version, "saved_entries": saved}
+    return {
+        "protocol": protocol,
+        "location_name": cleaned_location,
+        "version": next_version,
+        "saved_entries": saved,
+    }
 
 
 def deactivate_baseline(cur, *, protocol: str, location_name: str) -> dict[str, Any]:
@@ -181,7 +228,11 @@ def deactivate_baseline(cur, *, protocol: str, location_name: str) -> dict[str, 
         (cleaned_location, protocol),
     )
     deactivated = cur.fetchall()
-    return {"protocol": protocol, "location_name": cleaned_location, "deactivated_entries": len(deactivated)}
+    return {
+        "protocol": protocol,
+        "location_name": cleaned_location,
+        "deactivated_entries": len(deactivated),
+    }
 
 
 def _seconds_since(reference: datetime | None, now: datetime) -> float | None:
@@ -213,7 +264,8 @@ def compute_baseline_comparison(
         )
     else:
         cur.execute(
-            "SELECT * FROM device_baselines WHERE lower(location_name) = lower(%s) AND protocol = %s AND is_active",
+            "SELECT * FROM device_baselines WHERE lower(location_name) = lower(%s) "
+            "AND protocol = %s AND is_active",
             (cleaned_location, protocol),
         )
     baseline_rows = list(cur.fetchall())
@@ -238,10 +290,9 @@ def compute_baseline_comparison(
             if baseline_entry["expected_state"] == "ignored":
                 status = "ignored"
             elif protocol == "wifi":
-                changed = (
-                    (baseline_entry.get("ssid") or "") != (device.get("ssid") or "")
-                    or (baseline_entry.get("encryption") or "") != (device.get("encryption") or "")
-                )
+                changed = (baseline_entry.get("ssid") or "") != (device.get("ssid") or "") or (
+                    baseline_entry.get("encryption") or ""
+                ) != (device.get("encryption") or "")
                 status = "changed" if changed else "known"
             else:
                 changed = (baseline_entry.get("vendor") or "") != (device.get("vendor") or "")
@@ -253,9 +304,15 @@ def compute_baseline_comparison(
                     continue
                 if not device.get("vendor") or not candidate.get("vendor"):
                     continue
-                if str(device["vendor"]).strip().lower() != str(candidate["vendor"]).strip().lower():
+                if (
+                    str(device["vendor"]).strip().lower()
+                    != str(candidate["vendor"]).strip().lower()
+                ):
                     continue
-                if protocol == "bluetooth" and device.get("identity_confidence") not in ("low", "unknown"):
+                if protocol == "bluetooth" and device.get("identity_confidence") not in (
+                    "low",
+                    "unknown",
+                ):
                     continue
                 soft_match = candidate
                 break
@@ -263,13 +320,15 @@ def compute_baseline_comparison(
                 status = "uncertain_match"
             else:
                 status = "new"
-        items.append({
-            **device,
-            "stable_identity": identity,
-            "baseline_status": status,
-            "current_values": dict(device),
-            "reference_values": dict(baseline_entry) if baseline_entry is not None else None,
-        })
+        items.append(
+            {
+                **device,
+                "stable_identity": identity,
+                "baseline_status": status,
+                "current_values": dict(device),
+                "reference_values": dict(baseline_entry) if baseline_entry is not None else None,
+            }
+        )
 
     missing_items: list[dict[str, Any]] = []
     for identity, baseline_entry in baseline_by_identity.items():
@@ -282,12 +341,14 @@ def compute_baseline_comparison(
             if age_seconds is not None and age_seconds < grace_seconds:
                 continue
             status = "missing"
-        missing_items.append({
-            **baseline_entry,
-            "baseline_status": status,
-            "current_values": None,
-            "reference_values": dict(baseline_entry),
-        })
+        missing_items.append(
+            {
+                **baseline_entry,
+                "baseline_status": status,
+                "current_values": None,
+                "reference_values": dict(baseline_entry),
+            }
+        )
 
     summary = {state: 0 for state in COMPARISON_STATES}
     for item in items + missing_items:
@@ -306,12 +367,21 @@ def compute_baseline_comparison(
 
 
 def baseline_status_lookup(
-    cur, *, protocol: str, location_name: str, session_id: Any | None, grace_seconds: float,
+    cur,
+    *,
+    protocol: str,
+    location_name: str,
+    session_id: Any | None,
+    grace_seconds: float,
 ) -> dict[str, str]:
     """Lightweight wrapper for annotating device-list endpoints with baseline_status."""
     try:
         comparison = compute_baseline_comparison(
-            cur, protocol=protocol, location_name=location_name, session_id=session_id, grace_seconds=grace_seconds,
+            cur,
+            protocol=protocol,
+            location_name=location_name,
+            session_id=session_id,
+            grace_seconds=grace_seconds,
         )
     except HTTPException:
         return {}

@@ -1,12 +1,11 @@
 import unittest
 
 import numpy as np
-
 from app.ml.classical import NearestCentroidRfClassifier
 from app.ml.classifier import RuleBasedRfClassifier
 from app.ml.dataset import DatasetItem, grouped_split
-from app.ml.preprocessing import SpectrogramPreprocessor
 from app.ml.metrics import classification_metrics
+from app.ml.preprocessing import SpectrogramPreprocessor
 
 
 def frame(powers, sequence=0):

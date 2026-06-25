@@ -47,7 +47,8 @@ def preview_retention(dataset: str, older_than: str):
     time_column = sql.Identifier(config["time_column"])
     table = sql.Identifier(dataset)
     query = sql.SQL(
-        "SELECT count(*) AS row_count, min({col}) AS oldest, max({col}) AS newest FROM {table} WHERE {col} < %s"
+        "SELECT count(*) AS row_count, min({col}) AS oldest, max({col}) AS newest "
+        "FROM {table} WHERE {col} < %s"
     ).format(col=time_column, table=table)
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -79,9 +80,9 @@ def purge_retention(request: RetentionPurgeRequest):
     # sorokat hagyna a fájlban, amíg az autovacuum/VACUUM FULL nem futna le).
     # A regclass argumentum csak string literálként + ::regclass cast-tal helyes,
     # sql.Identifier-ként a parser oszlophivatkozásnak nézné a táblanevet.
-    query = sql.SQL("SELECT drop_chunks({table}::regclass, older_than => %s) AS dropped_chunk").format(
-        table=sql.Literal(request.dataset)
-    )
+    query = sql.SQL(
+        "SELECT drop_chunks({table}::regclass, older_than => %s) AS dropped_chunk"
+    ).format(table=sql.Literal(request.dataset))
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(query, (cutoff,))

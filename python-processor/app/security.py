@@ -13,7 +13,12 @@ _PUBLIC_WRITE_PATHS = {"/api/health", "/api/health/live", "/api/health/ready", "
 
 
 def _boolean(name: str, default: bool = False) -> bool:
-    return os.getenv(name, "true" if default else "false").strip().lower() in {"1", "true", "yes", "on"}
+    return os.getenv(name, "true" if default else "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _default_synthetic_fallback(app_mode: str) -> bool:
@@ -63,9 +68,13 @@ class SecuritySettings:
             errors.append("ALLOW_SYNTHETIC_FALLBACK must be false in production")
         if self.auth_mode not in {"disabled", "api_token"}:
             errors.append("AUTH_MODE must be disabled or api_token")
-        for name, value in (("AUTH_OPERATOR_TOKEN_SHA256", self.operator_token_sha256),
-                            ("AUTH_ADMIN_TOKEN_SHA256", self.admin_token_sha256)):
-            if value and (len(value) != 64 or any(char not in "0123456789abcdef" for char in value)):
+        for name, value in (
+            ("AUTH_OPERATOR_TOKEN_SHA256", self.operator_token_sha256),
+            ("AUTH_ADMIN_TOKEN_SHA256", self.admin_token_sha256),
+        ):
+            if value and (
+                len(value) != 64 or any(char not in "0123456789abcdef" for char in value)
+            ):
                 errors.append(f"{name} must be a lowercase SHA-256 hex digest")
         if self.app_mode == "production":
             if not os.getenv("DATABASE_URL", "").strip():
@@ -89,7 +98,9 @@ def _token_role(token: str) -> str | None:
     digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
     if SETTINGS.admin_token_sha256 and hmac.compare_digest(digest, SETTINGS.admin_token_sha256):
         return "admin"
-    if SETTINGS.operator_token_sha256 and hmac.compare_digest(digest, SETTINGS.operator_token_sha256):
+    if SETTINGS.operator_token_sha256 and hmac.compare_digest(
+        digest, SETTINGS.operator_token_sha256
+    ):
         return "operator"
     return None
 
@@ -105,7 +116,9 @@ def authorize_request(request: Request) -> dict[str, Any]:
     authorization = request.headers.get("authorization", "")
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not token:
-        raise HTTPException(status_code=401, detail="bearer_token_required", headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(
+            status_code=401, detail="bearer_token_required", headers={"WWW-Authenticate": "Bearer"}
+        )
     role = _token_role(token)
     if role not in {"operator", "admin"}:
         raise HTTPException(status_code=403, detail="operator_or_admin_role_required")

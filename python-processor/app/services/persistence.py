@@ -11,14 +11,22 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 
 from app.db import get_db
-from app.runtime import DEVICE_IMPORT_TABLES, SINGLE_ACTIVE_MEASUREMENT_SESSION, UPLOAD_DIR
+from app.runtime import DEVICE_IMPORT_TABLES, UPLOAD_DIR
 from app.utils.parsing import (
-    parse_datetime_value, parse_float, parse_frequency_hz, parse_int, parse_mac, row_get,
+    parse_datetime_value,
+    parse_float,
+    parse_frequency_hz,
+    parse_int,
+    parse_mac,
+    row_get,
 )
+
 
 def get_row_measured_at(row: dict[str, Any], fallback: datetime | None) -> datetime | None:
     return (
-        parse_datetime_value(row_get(row, "measured_at", "timestamp", "time", "date", "first_seen", "last_seen"))
+        parse_datetime_value(
+            row_get(row, "measured_at", "timestamp", "time", "date", "first_seen", "last_seen")
+        )
         or fallback
     )
 
@@ -47,7 +55,9 @@ def resolve_import_session(
         try:
             session_id = uuid.UUID(measurement_session_id.strip())
         except (ValueError, AttributeError) as exc:
-            raise HTTPException(status_code=400, detail="Ervenytelen measurement_session_id.") from exc
+            raise HTTPException(
+                status_code=400, detail="Ervenytelen measurement_session_id."
+            ) from exc
         cur.execute(
             """
             SELECT id, location_id, location_name
@@ -83,7 +93,10 @@ def resolve_import_session(
                 status_code=409,
                 detail={
                     "code": "ambiguous_active_sessions",
-                    "message": "Tobb aktiv meresi munkamenet van; adj meg explicit measurement_session_id-t vagy location_name-t.",
+                    "message": (
+                        "Tobb aktiv meresi munkamenet van; adj meg explicit "
+                        "measurement_session_id-t vagy location_name-t."
+                    ),
                     "active_sessions": [
                         {"id": str(row["id"]), "location_name": row["location_name"]}
                         for row in active_sessions
@@ -122,7 +135,10 @@ def resolve_import_session(
             status_code=409,
             detail={
                 "code": "ambiguous_active_sessions",
-                "message": "Tobb aktiv meresi munkamenet van ezen a helyszinen; adj meg explicit measurement_session_id-t.",
+                "message": (
+                    "Tobb aktiv meresi munkamenet van ezen a helyszinen; adj meg explicit "
+                    "measurement_session_id-t."
+                ),
                 "active_sessions": [
                     {"id": str(row["id"]), "location_name": row["location_name"]}
                     for row in active_sessions
@@ -131,13 +147,18 @@ def resolve_import_session(
         )
     if len(active_sessions) == 1:
         active_session = active_sessions[0]
-        location_id = str(active_session["location_id"] or ensure_location(cur, active_session["location_name"]))
+        location_id = str(
+            active_session["location_id"] or ensure_location(cur, active_session["location_name"])
+        )
         return active_session["id"], active_session["location_name"], location_id
 
     if not allow_without_session:
         raise HTTPException(
             status_code=409,
-            detail="Nincs aktiv meresi munkamenet ezen a helyszinen. Indits sessiont, vagy engedelyezd explicit a session nelkuli importot.",
+            detail=(
+                "Nincs aktiv meresi munkamenet ezen a helyszinen. Indits sessiont, vagy "
+                "engedelyezd explicit a session nelkuli importot."
+            ),
         )
     return None, cleaned_location, ensure_location(cur, cleaned_location)
 
@@ -241,7 +262,9 @@ def create_csv_import(cur, filename: str, device_type: str) -> str:
     return str(cur.fetchone()["id"])
 
 
-def save_uploaded_file(cur, csv_import_id: str, filename: str, file_bytes: bytes, content_type: str | None) -> str:
+def save_uploaded_file(
+    cur, csv_import_id: str, filename: str, file_bytes: bytes, content_type: str | None
+) -> str:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     safe_name = Path(filename).name or "upload.csv"
     stored_name = f"{csv_import_id}_{safe_name}"
@@ -299,13 +322,28 @@ def save_reference_asset(filename: str, file_bytes: bytes) -> Path:
     return storage_path
 
 
-def extract_common_fields(device_type: str, row: dict[str, Any], fallback_time: datetime | None) -> dict[str, Any]:
+def extract_common_fields(
+    device_type: str, row: dict[str, Any], fallback_time: datetime | None
+) -> dict[str, Any]:
     measured_at = get_row_measured_at(row, fallback_time)
     frequency_hz = parse_frequency_hz(
-        row_get(row, "frequency", "freq", "frequency_hz", "freq_hz", "frequency_mhz", "freq_mhz", "channel_frequency")
+        row_get(
+            row,
+            "frequency",
+            "freq",
+            "frequency_hz",
+            "freq_hz",
+            "frequency_mhz",
+            "freq_mhz",
+            "channel_frequency",
+        )
     )
-    power_dbm = parse_float(row_get(row, "power", "power_dbm", "dbm", "level", "rssi", "signal", "signal_dbm"))
-    mac_address = parse_mac(row_get(row, "mac", "mac_address", "bssid", "address", "device", "device_mac"))
+    power_dbm = parse_float(
+        row_get(row, "power", "power_dbm", "dbm", "level", "rssi", "signal", "signal_dbm")
+    )
+    mac_address = parse_mac(
+        row_get(row, "mac", "mac_address", "bssid", "address", "device", "device_mac")
+    )
 
     fields: dict[str, Any] = {
         "measured_at": measured_at,
@@ -374,14 +412,28 @@ def insert_device_import_row(
 ) -> None:
     table = DEVICE_IMPORT_TABLES[device_type]
     columns = ["csv_import_id", "location_id", "measured_at", "row_number", "raw_row"]
-    values: list[Any] = [csv_import_id, location_id, fields.get("measured_at"), row_number, Jsonb(row)]
+    values: list[Any] = [
+        csv_import_id,
+        location_id,
+        fields.get("measured_at"),
+        row_number,
+        Jsonb(row),
+    ]
 
     allowed_by_device = {
         "oscor": ["frequency_hz", "power_dbm", "bandwidth_hz", "signal_label"],
         "ddf": ["frequency_hz", "power_dbm", "azimuth_deg", "bearing_deg"],
         "pr100": ["frequency_hz", "power_dbm", "modulation", "bandwidth_hz"],
         "mesa": ["frequency_hz", "power_dbm", "signal_label", "classification"],
-        "kismet": ["mac_address", "ssid", "channel", "frequency_hz", "rssi_dbm", "vendor", "encryption"],
+        "kismet": [
+            "mac_address",
+            "ssid",
+            "channel",
+            "frequency_hz",
+            "rssi_dbm",
+            "vendor",
+            "encryption",
+        ],
         "bettercap_ble": ["mac_address", "device_name", "rssi_dbm", "vendor", "service_uuid"],
     }
     for column in allowed_by_device[device_type]:
@@ -409,9 +461,18 @@ def upsert_kismet_observation(cur, location_id: str, fields: dict[str, Any]) -> 
           ssid = COALESCE(EXCLUDED.ssid, wifi_devices.ssid),
           vendor = COALESCE(EXCLUDED.vendor, wifi_devices.vendor),
           encryption = COALESCE(EXCLUDED.encryption, wifi_devices.encryption),
-          last_seen = GREATEST(COALESCE(wifi_devices.last_seen, EXCLUDED.last_seen), EXCLUDED.last_seen)
+          last_seen = GREATEST(
+            COALESCE(wifi_devices.last_seen, EXCLUDED.last_seen), EXCLUDED.last_seen
+          )
         """,
-        (mac, fields.get("ssid"), fields.get("vendor"), fields.get("encryption"), observed_at, observed_at),
+        (
+            mac,
+            fields.get("ssid"),
+            fields.get("vendor"),
+            fields.get("encryption"),
+            observed_at,
+            observed_at,
+        ),
     )
     cur.execute(
         """
@@ -443,7 +504,9 @@ def upsert_bluetooth_observation(cur, location_id: str, fields: dict[str, Any]) 
         ON CONFLICT (mac_address) DO UPDATE SET
           device_name = COALESCE(EXCLUDED.device_name, bluetooth_devices.device_name),
           vendor = COALESCE(EXCLUDED.vendor, bluetooth_devices.vendor),
-          last_seen = GREATEST(COALESCE(bluetooth_devices.last_seen, EXCLUDED.last_seen), EXCLUDED.last_seen)
+          last_seen = GREATEST(
+            COALESCE(bluetooth_devices.last_seen, EXCLUDED.last_seen), EXCLUDED.last_seen
+          )
         """,
         (mac, fields.get("device_name"), fields.get("vendor"), observed_at, observed_at),
     )
@@ -470,7 +533,8 @@ def fetch_repeated_macs(min_locations: int = 2) -> list[dict[str, Any]]:
             cur.execute(
                 """
                 WITH sightings AS (
-                  SELECT COALESCE(source_type, 'wifi') AS source_type, bssid AS mac_address, location_id
+                  SELECT COALESCE(source_type, 'wifi') AS source_type, bssid AS mac_address,
+                         location_id
                   FROM wifi_observations
                   WHERE bssid IS NOT NULL AND location_id IS NOT NULL
                   UNION ALL
@@ -478,7 +542,8 @@ def fetch_repeated_macs(min_locations: int = 2) -> list[dict[str, Any]]:
                   FROM bluetooth_observations
                   WHERE mac_address IS NOT NULL AND location_id IS NOT NULL
                   UNION ALL
-                  SELECT 'kismet_import' AS source_type, COALESCE(bssid, mac_address) AS mac_address, location_id
+                  SELECT 'kismet_import' AS source_type,
+                         COALESCE(bssid, mac_address) AS mac_address, location_id
                   FROM kismet_import_rows
                   WHERE COALESCE(bssid, mac_address) IS NOT NULL AND location_id IS NOT NULL
                   UNION ALL

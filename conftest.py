@@ -1,13 +1,12 @@
 import os
 import sys
+import types
 from collections.abc import Iterator
 from importlib.machinery import ModuleSpec
 from importlib.util import find_spec
 from pathlib import Path
-import types
 
 import pytest
-
 
 ROOT = Path(__file__).resolve().parent
 PYTHON_PROCESSOR_ROOT = ROOT / "python-processor"
@@ -28,6 +27,7 @@ if str(ROOT) not in sys.path:
 
 
 if find_spec("prometheus_client") is None:
+
     class _Metric:
         def labels(self, *args, **kwargs):
             return self

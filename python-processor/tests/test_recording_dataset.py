@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-
 from app.ml.recording_dataset import RecordingLabel, build_recording_windows, load_recording
 
 
@@ -31,7 +30,9 @@ class RecordingDatasetTest(unittest.TestCase):
     def create_recording(self, root: Path) -> Path:
         recording = root / "recording-a"
         recording.mkdir()
-        frame_bytes = "".join(json.dumps(spectrum_frame(index)) + "\n" for index in range(4)).encode()
+        frame_bytes = "".join(
+            json.dumps(spectrum_frame(index)) + "\n" for index in range(4)
+        ).encode()
         (recording / "frames.ndjson").write_bytes(frame_bytes)
         (recording / "checksum.sha256").write_text(
             hashlib.sha256(frame_bytes).hexdigest() + "  frames.ndjson\n", encoding="ascii"

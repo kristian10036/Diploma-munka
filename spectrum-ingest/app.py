@@ -16,7 +16,6 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
-
 RF_AGENT_WS_URL = os.getenv("RF_AGENT_WS_URL", "ws://rf-agent:8765/ws/spectrum")
 MAX_QUEUE = max(1, min(256, int(os.getenv("SPECTRUM_INGEST_MAX_QUEUE", "32"))))
 RECONNECT_SECONDS = max(0.1, float(os.getenv("SPECTRUM_INGEST_RECONNECT_SECONDS", "2")))
@@ -34,21 +33,31 @@ RECEIVED_FRAMES = Counter("spectrum_ingest_received_frames_total", "Valid Spectr
 INVALID_FRAMES = Counter("spectrum_ingest_invalid_frames_total", "Invalid SpectrumFrames rejected")
 DROPPED_FRAMES = Counter("spectrum_ingest_dropped_frames_total", "Frames dropped for slow clients")
 SEQUENCE_GAPS = Counter("spectrum_ingest_sequence_gaps_total", "Detected source sequence gaps")
-CONNECTED_CLIENTS = Gauge("spectrum_ingest_connected_clients", "Connected spectrum WebSocket clients")
-SOURCE_LATENCY_MS = Gauge("spectrum_ingest_source_latency_milliseconds", "Latest source frame latency in milliseconds")
+CONNECTED_CLIENTS = Gauge(
+    "spectrum_ingest_connected_clients", "Connected spectrum WebSocket clients"
+)
+SOURCE_LATENCY_MS = Gauge(
+    "spectrum_ingest_source_latency_milliseconds", "Latest source frame latency in milliseconds"
+)
 SOURCE_FPS = Gauge("spectrum_ingest_source_fps", "Rolling valid input frame rate")
 OUTGOING_FPS = Gauge("spectrum_ingest_outgoing_fps", "Rolling aggregate outgoing frame rate")
 FRAME_POINTS = Histogram(
-    "spectrum_ingest_frame_points", "SpectrumFrame point count",
+    "spectrum_ingest_frame_points",
+    "SpectrumFrame point count",
     buckets=(16, 64, 128, 256, 512, 1024, 4096, 16384, 65536),
 )
 
 FRAME_BYTES = Histogram(
-    "spectrum_ingest_frame_bytes", "Serialized SpectrumFrame byte count",
+    "spectrum_ingest_frame_bytes",
+    "Serialized SpectrumFrame byte count",
     buckets=(1024, 4096, 16384, 65536, 262144, 1048576, 4194304),
 )
-SOURCE_CONNECTED = Gauge("spectrum_ingest_source_connected", "Whether RF Agent WebSocket is connected")
-AUDIO_PACKETS = Counter("spectrum_ingest_audio_packets_total", "Valid SDRangel PCM UDP packets received")
+SOURCE_CONNECTED = Gauge(
+    "spectrum_ingest_source_connected", "Whether RF Agent WebSocket is connected"
+)
+AUDIO_PACKETS = Counter(
+    "spectrum_ingest_audio_packets_total", "Valid SDRangel PCM UDP packets received"
+)
 AUDIO_BYTES = Counter("spectrum_ingest_audio_bytes_total", "SDRangel PCM audio bytes received")
 AUDIO_DROPPED_PACKETS = Counter(
     "spectrum_ingest_audio_dropped_packets_total", "Audio packets dropped for slow browser clients"
@@ -59,6 +68,7 @@ AUDIO_INVALID_PACKETS = Counter(
 AUDIO_CONNECTED_CLIENTS = Gauge(
     "spectrum_ingest_audio_connected_clients", "Connected browser audio WebSocket clients"
 )
+
 
 @dataclass
 class Metrics:
@@ -124,10 +134,27 @@ def _finite_number(value: Any) -> bool:
 
 def validate_frame(frame: Any) -> tuple[bool, str]:
     required = {
-        "schema_version", "sensor_id", "source_type", "source_device", "device_model", "measurement_mode", "session_id",
-        "timestamp", "sequence", "start_frequency_hz", "stop_frequency_hz",
-        "step_frequency_hz", "center_frequency_hz", "sample_rate_hz", "rbw_hz",
-        "num_points", "point_count", "power_unit", "powers_dbm", "flags", "metadata",
+        "schema_version",
+        "sensor_id",
+        "source_type",
+        "source_device",
+        "device_model",
+        "measurement_mode",
+        "session_id",
+        "timestamp",
+        "sequence",
+        "start_frequency_hz",
+        "stop_frequency_hz",
+        "step_frequency_hz",
+        "center_frequency_hz",
+        "sample_rate_hz",
+        "rbw_hz",
+        "num_points",
+        "point_count",
+        "power_unit",
+        "powers_dbm",
+        "flags",
+        "metadata",
     }
     if not isinstance(frame, dict) or not required <= frame.keys():
         return False, "missing required SpectrumFrame fields"
@@ -135,7 +162,14 @@ def validate_frame(frame: Any) -> tuple[bool, str]:
         return False, "unsupported SpectrumFrame schema or power unit"
     if frame["source_type"] not in {"mock", "replay", "aaronia", "usrp", "hackrf"}:
         return False, "invalid source_type"
-    for key in ("sensor_id", "source_device", "device_model", "measurement_mode", "session_id", "timestamp"):
+    for key in (
+        "sensor_id",
+        "source_device",
+        "device_model",
+        "measurement_mode",
+        "session_id",
+        "timestamp",
+    ):
         if not isinstance(frame[key], str) or not frame[key]:
             return False, f"invalid {key}"
     try:
@@ -144,24 +178,47 @@ def validate_frame(frame: Any) -> tuple[bool, str]:
         return False, "invalid timestamp"
     if timestamp.tzinfo is None:
         return False, "timestamp timezone is required"
-    integers = ("sequence", "start_frequency_hz", "stop_frequency_hz", "step_frequency_hz",
-                "center_frequency_hz", "sample_rate_hz", "num_points")
+    integers = (
+        "sequence",
+        "start_frequency_hz",
+        "stop_frequency_hz",
+        "step_frequency_hz",
+        "center_frequency_hz",
+        "sample_rate_hz",
+        "num_points",
+    )
     if any(not isinstance(frame[key], int) or isinstance(frame[key], bool) for key in integers):
         return False, "integer frame field has invalid type"
     points = frame["num_points"]
-    if points <= 0 or points > MAX_POINTS or frame["point_count"] != points or frame["step_frequency_hz"] <= 0:
+    if (
+        points <= 0
+        or points > MAX_POINTS
+        or frame["point_count"] != points
+        or frame["step_frequency_hz"] <= 0
+    ):
         return False, "invalid point count or frequency step"
     expected_stop = frame["start_frequency_hz"] + frame["step_frequency_hz"] * (points - 1)
     if frame["stop_frequency_hz"] != expected_stop:
         return False, "frequency axis is inconsistent"
-    if not frame["start_frequency_hz"] <= frame["center_frequency_hz"] <= frame["stop_frequency_hz"]:
+    if (
+        not frame["start_frequency_hz"]
+        <= frame["center_frequency_hz"]
+        <= frame["stop_frequency_hz"]
+    ):
         return False, "center frequency is outside the frame"
     powers = frame["powers_dbm"]
-    if not isinstance(powers, list) or len(powers) != points or not all(_finite_number(x) for x in powers):
+    if (
+        not isinstance(powers, list)
+        or len(powers) != points
+        or not all(_finite_number(x) for x in powers)
+    ):
         return False, "powers_dbm is invalid"
     if not _finite_number(frame["rbw_hz"]) or frame["rbw_hz"] <= 0:
         return False, "rbw_hz is invalid"
-    if frame["source_type"] in {"mock", "replay"} and frame["metadata"].get("is_simulated") is not True:
+    if (
+        frame["source_type"] in {"mock", "replay"}
+        and frame["metadata"].get("is_simulated") is not True
+    ):
         return False, "simulated source is not labelled"
     return True, ""
 
@@ -272,13 +329,16 @@ async def consume_source() -> None:
                     )
                     SOURCE_LATENCY_MS.set(state.metrics.source_latency_ms)
                     state.last_source = {
-                        "sensor_id": frame["sensor_id"], "source_type": frame["source_type"],
-                        "source_device": frame["source_device"], "session_id": frame["session_id"],
+                        "sensor_id": frame["sensor_id"],
+                        "source_type": frame["source_type"],
+                        "source_device": frame["source_device"],
+                        "session_id": frame["session_id"],
                         "device_model": frame["device_model"],
                         "measurement_mode": frame["measurement_mode"],
                         "start_frequency_hz": frame["start_frequency_hz"],
                         "stop_frequency_hz": frame["stop_frequency_hz"],
-                        "point_count": frame["point_count"], "sequence": frame["sequence"],
+                        "point_count": frame["point_count"],
+                        "sequence": frame["sequence"],
                     }
                     state.last_payload = payload
                     state.last_error = None
@@ -326,6 +386,7 @@ app = FastAPI(title="Spectrum Ingest", version="1.0.0", lifespan=lifespan)
 
 logger = logging.getLogger("spectrum-ingest")
 
+
 @app.middleware("http")
 async def request_headers(request: Request, call_next):
     response = await call_next(request)
@@ -334,9 +395,11 @@ async def request_headers(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store"
     return response
 
+
 @app.get("/live")
 async def live() -> dict[str, Any]:
     return {"status": "alive", "service": "spectrum-ingest"}
+
 
 @app.get("/ready")
 async def ready():
@@ -413,12 +476,14 @@ async def audio_socket(socket: WebSocket) -> None:
     state.audio_clients.add(queue)
     state.metrics.audio_connected_clients = len(state.audio_clients)
     AUDIO_CONNECTED_CLIENTS.set(state.metrics.audio_connected_clients)
-    await socket.send_json({
-        "schema": "pcm-s16le-v1",
-        "sample_rate_hz": AUDIO_SAMPLE_RATE_HZ,
-        "channels": 1,
-        "endianness": "little",
-    })
+    await socket.send_json(
+        {
+            "schema": "pcm-s16le-v1",
+            "sample_rate_hz": AUDIO_SAMPLE_RATE_HZ,
+            "channels": 1,
+            "endianness": "little",
+        }
+    )
     try:
         while True:
             await socket.send_bytes(await queue.get())
