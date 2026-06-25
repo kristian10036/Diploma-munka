@@ -61,7 +61,7 @@ class SdrangelDemodRequest(BaseModel):
     channel_index: int | None = Field(default=None, ge=0, le=255)
     offset_hz: int = Field(default=0, ge=-1_000_000_000, le=1_000_000_000)
     audio_sample_rate: int | None = Field(default=None, ge=8_000, le=384_000)
-    bandwidth_hz: int | None = Field(default=None, ge=100, le=20_000_000)
+    bandwidth_hz: int | None = Field(default=None, ge=100, le=500_000_000)
     squelch_db: float | None = Field(default=None, ge=-150, le=20)
     audio_device: str | None = Field(default="default", max_length=128)
     volume: float = Field(default=1.0, ge=0.0, le=10.0)
@@ -81,7 +81,7 @@ class SdrangelDemodUpdateRequest(BaseModel):
     channel_index: int = Field(ge=0, le=255)
     demodulator: str
     frequency_hz: int | None = Field(default=None, ge=1, le=100_000_000_000)
-    bandwidth_hz: int | None = Field(default=None, ge=100, le=20_000_000)
+    bandwidth_hz: int | None = Field(default=None, ge=100, le=500_000_000)
     squelch_db: float | None = Field(default=None, ge=-150, le=20)
     volume: float | None = Field(default=None, ge=0.0, le=10.0)
     input_frequency_offset_hz: int | None = Field(default=None, ge=-1_000_000_000, le=1_000_000_000)

@@ -51,6 +51,11 @@ private:
 
     mutable std::mutex mutex_;
     AaroniaRfConfig config_;
+    // A legutóbbi konfiguráció, amely tényleg érvényes frame-et hozott. Ha egy
+    // viewport-kérés (pl. szűk span/finom RBW) ismételten lefagyasztja a
+    // workert -- amit az SDK belső kivétele okoz, nem a mi kódunk --, ide
+    // esik vissza a forrás, hogy ne fagyjon le végtelenül egy rossz kérésen.
+    AaroniaRfConfig last_good_config_;
     SourceStatus status_;
     pid_t worker_pid_{-1};
     int output_fd_{-1};

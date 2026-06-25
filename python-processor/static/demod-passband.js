@@ -35,7 +35,7 @@
 
   // Globális, UI-szintű biztonsági korlátok (a capability felülírhatja).
   const ABSOLUTE_MIN_BANDWIDTH_HZ = 100;
-  const ABSOLUTE_MAX_BANDWIDTH_HZ = 20_000_000;
+  const ABSOLUTE_MAX_BANDWIDTH_HZ = 500_000_000;
 
   function normalizeMode(mode) {
     return String(mode || '').trim().toUpperCase();

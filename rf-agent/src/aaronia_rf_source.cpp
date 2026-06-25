@@ -15,6 +15,24 @@ namespace rf_agent {
 namespace {
 using Json = nlohmann::json;
 
+// Hány egymást követő sikertelen worker-indítás után adjuk fel az aktuális
+// (pl. viewport-zoom miatt kért) konfigurációt, és álljunk vissza az utolsó
+// olyanra, amely valódi frame-et adott.
+constexpr unsigned int kMaxConsecutiveFailuresBeforeFallback = 3;
+
+// Megfigyelés (élesben tesztelve): egy viewport-váltás
+// utáni AZONNALI worker-újraindítás konzisztensen "FunctionFailedException"-t
+// dob az SDK belsejében, függetlenül a kért span/RBW értékektől -- ez nem egy
+// konkrét rossz paraméter, hanem valószínűleg egy device-szintű erőforrás
+// (USB/FPGA) felszabadulására váró race. Egy ~3 másodperces szünet a
+// leállítás és az újraindítás között NEM oldotta meg élesben, ezért ide
+// szándékosan NEM kerül ilyen várakozás vissza -- csak az API-hívás
+// (RF_AGENT_TIMEOUT_SECONDS) időtúllépését okozná anélkül, hogy a tényleges
+// hibát megszüntetné. A megoldás valószínűleg csak egy teljes
+// rf-agent-konténer-/process-újraindítással érhető el (ez konzisztensen
+// működött), amit a fallback logika nem tud kiváltani.
+
+
 void child_environment(const AaroniaRfConfig& config) {
     const auto set = [](const char* name, const std::string& value) {
         setenv(name, value.c_str(), 1);
@@ -31,7 +49,7 @@ void child_environment(const AaroniaRfConfig& config) {
 }
 }
 
-AaroniaRfSource::AaroniaRfSource(AaroniaRfConfig config) : config_(std::move(config)) {
+AaroniaRfSource::AaroniaRfSource(AaroniaRfConfig config) : config_(std::move(config)), last_good_config_(config_) {
     // Sequence numbers restart with the rf-agent process. Give each process a
     // distinct session key so downstream reconnects never mix sequence spaces.
     const auto epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -226,13 +244,27 @@ void AaroniaRfSource::noteExitLocked(int wait_status) {
     worker_pid_ = -1;
     if (stop_requested_) return;
     ++restart_attempts_;
-    const auto seconds = std::min(30U, 5U << std::min(restart_attempts_ - 1, 3U));
+    std::string reason = WIFSIGNALED(wait_status)
+        ? "Aaronia worker terminated by signal " + std::to_string(WTERMSIG(wait_status))
+        : "Aaronia worker exited with code " + std::to_string(WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : -1);
+    // Egy konkrét viewport (szűk span / finom RBW) ismételt SDK-crash-eket
+    // okozhat -- ezt mi nem tudjuk megjavítani, csak elkerülni. Néhány
+    // egymást követő sikertelen indítás után visszaállunk az utolsó, valódi
+    // frame-et adó konfigurációra, hogy a forrás ne fagyjon le végtelenül, és
+    // gyorsan (rövid backoff-fal) próbáljuk újra azzal.
+    unsigned int seconds = 0;
+    if (restart_attempts_ >= kMaxConsecutiveFailuresBeforeFallback) {
+        config_ = last_good_config_;
+        restart_attempts_ = 0;
+        seconds = 5;
+        reason += " (fallback: visszaallas az utolso mukodo viewportra)";
+    } else {
+        seconds = std::min(30U, 5U << std::min(restart_attempts_ - 1, 3U));
+    }
     next_restart_ = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
     status_.state = SourceState::Error;
     status_.available = false;
-    status_.message = WIFSIGNALED(wait_status)
-        ? "Aaronia worker terminated by signal " + std::to_string(WTERMSIG(wait_status))
-        : "Aaronia worker exited with code " + std::to_string(WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : -1);
+    status_.message = reason;
 }
 
 std::optional<SpectrumFrame> AaroniaRfSource::parseLineLocked(const std::string& line) {
@@ -279,6 +311,9 @@ std::optional<SpectrumFrame> AaroniaRfSource::parseLineLocked(const std::string&
             status_.frames_dropped += worker_dropped - worker_dropped_frames_;
         }
         worker_dropped_frames_ = worker_dropped;
+        // A jelenlegi konfiguráció tényleg adott egy valódi frame-et -- ez a
+        // visszaesési pont, ha egy KÉSŐBBI viewport-kérés lefagyasztja a workert.
+        last_good_config_ = config_;
         restart_attempts_ = 0;
         return frame;
     } catch (const std::exception& error) {

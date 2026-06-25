@@ -120,7 +120,7 @@ const freqHzToX = (hz) => (hz - 145_000_000) / 1000;
   assert(D.clampBandwidth(-5).reason === 'invalid', 'clamp: negative invalid');
   assert(D.clampBandwidth(0).reason === 'invalid', 'clamp: zero invalid');
   assert(D.clampBandwidth(50).value === D.ABSOLUTE_MIN_BANDWIDTH_HZ, 'clamp: below absolute min');
-  assert(D.clampBandwidth(99_000_000).value === D.ABSOLUTE_MAX_BANDWIDTH_HZ, 'clamp: above absolute max');
+  assert(D.clampBandwidth(999_000_000).value === D.ABSOLUTE_MAX_BANDWIDTH_HZ, 'clamp: above absolute max');
   const cap = D.clampBandwidth(5_000_000, { captureBandwidthHz: 2_000_000 });
   assert(cap.value === 2_000_000 && cap.clamped, 'clamp: capped to capture bandwidth');
 })();

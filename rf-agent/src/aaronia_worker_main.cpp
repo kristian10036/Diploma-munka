@@ -221,6 +221,17 @@ void set_float(Device* device, Config* root, ConfigFind find, ConfigSetFloat set
     require(set(device, &item, value), "AARTSAAPI_ConfigSetFloat");
 }
 
+// Sok AARTSAAPI numerikus config csak step_value többszöröseit fogadja el
+// (pl. RBW létra); egy nem illeszkedő érték a megfigyelt SDK-oldali
+// "FunctionFailedException" egyik gyanúsítottja. step_value<=0 esetén nincs
+// ismert lépésköz, csak [min,max]-ra szorítunk.
+double snap_to_step(double value, double min_value, double max_value, double step_value) {
+    const double clamped = std::clamp(value, min_value, max_value);
+    if (!(step_value > 0.0)) return clamped;
+    const double steps = std::round((clamped - min_value) / step_value);
+    return std::clamp(min_value + steps * step_value, min_value, max_value);
+}
+
 std::vector<double> downsample(const float* input, std::size_t size, std::size_t maximum,
                                std::size_t& factor) {
     factor = std::max<std::size_t>(1, (size + maximum - 1) / maximum);
@@ -329,8 +340,15 @@ int main() {
         const auto stop_hz = std::clamp(requested_stop_hz, start_hz + 1, hardware_max_hz);
         if (start_hz >= stop_hz) throw std::runtime_error("requested sweep is outside the hardware range");
 
-        require(config_set_float(&device, &start_item, static_cast<double>(start_hz)), "AARTSAAPI_ConfigSetFloat(startfreq)");
-        require(config_set_float(&device, &stop_item, static_cast<double>(stop_hz)), "AARTSAAPI_ConfigSetFloat(stopfreq)");
+        // A start/stopfreq is rendelkezhet step_value-val (pl. lépésközös
+        // hangolás); ha nem illeszkedünk rá, ugyanúgy elutasíthatja az SDK,
+        // mint az RBW-nél megfigyelt FunctionFailedException esetén.
+        const double snapped_start_hz = snap_to_step(
+            static_cast<double>(start_hz), start_info.min_value, start_info.max_value, start_info.step_value);
+        const double snapped_stop_hz = snap_to_step(
+            static_cast<double>(stop_hz), stop_info.min_value, stop_info.max_value, stop_info.step_value);
+        require(config_set_float(&device, &start_item, snapped_start_hz), "AARTSAAPI_ConfigSetFloat(startfreq)");
+        require(config_set_float(&device, &stop_item, snapped_stop_hz), "AARTSAAPI_ConfigSetFloat(stopfreq)");
         Config rbw_item{};
         require(config_find(&device, &root, &rbw_item, L"main/rbwfreq"), "AARTSAAPI_ConfigFind(rbwfreq)");
         ConfigInfo rbw_info{}; rbw_info.cbsize = sizeof(rbw_info);
@@ -341,10 +359,21 @@ int main() {
         // Use the actual transport point budget instead. This keeps the first
         // startup close to Aaronia's official SweepSpectrum sample and avoids
         // the SDK abort observed during AARTSAAPI_StartDevice.
-        const double overview_rbw = std::clamp(
-            std::max(rbw_hz, static_cast<double>(stop_hz - start_hz) /
-                static_cast<double>(max_points)),
-            rbw_info.min_value, rbw_info.max_value);
+        const double requested_rbw = std::max(rbw_hz, (snapped_stop_hz - snapped_start_hz) /
+            static_cast<double>(max_points));
+        // rbwfreq tipikusan egy lépésközös (RBW-létra) paraméter: a nyers
+        // span/points hányadost az SDK által visszaadott step_value-ra
+        // illesztjük, mielőtt beállítanánk -- ez a vezető gyanúsított a szűk
+        // span-on/finom RBW-n megfigyelt SDK-crash-ekhez.
+        const double overview_rbw = snap_to_step(
+            requested_rbw, rbw_info.min_value, rbw_info.max_value, rbw_info.step_value);
+        std::cerr << "aaronia_worker_rbw_step requested_rbw=" << requested_rbw
+                  << " snapped_rbw=" << overview_rbw
+                  << " rbw_min=" << rbw_info.min_value << " rbw_max=" << rbw_info.max_value
+                  << " rbw_step=" << rbw_info.step_value
+                  << " start_step=" << start_info.step_value << " stop_step=" << stop_info.step_value
+                  << '\n';
+        std::cerr.flush();
         require(config_set_float(&device, &rbw_item, overview_rbw), "AARTSAAPI_ConfigSetFloat(rbwfreq)");
         set_float(&device, &root, config_find, config_set_float, L"main/reflevel", reference_dbm);
         if (device_metadata.model.empty()) {
@@ -360,10 +389,11 @@ int main() {
         std::cerr << "aaronia_worker_config model=\"" << device_metadata.model
                   << "\" hardware_min_hz=" << hardware_min_hz
                   << " hardware_max_hz=" << hardware_max_hz
-                  << " start_hz=" << start_hz << " stop_hz=" << stop_hz
+                  << " start_hz=" << snapped_start_hz << " stop_hz=" << snapped_stop_hz
                   << " receiver_clock=" << receiver_clock
                   << " rbw_hz=" << overview_rbw
                   << " available_rtbw_hz=" << device_metadata.available_rtbw_hz << '\n';
+        std::cerr.flush();
         require(start_device(&device), "AARTSAAPI_StartDevice"); started = true;
 
         std::uint64_t sequence = 0, hardware_dropped = 0;
@@ -427,5 +457,14 @@ int main() {
         // after failed initialization.
         std::cerr.flush();
         _Exit(2);
+    } catch (...) {
+        // The Aaronia SDK has been observed to throw its own internal
+        // exception type (e.g. FunctionFailedException) on a rejected
+        // config value, which does not derive from std::exception. Without
+        // this handler that becomes an uncaught exception -> SIGABRT
+        // instead of a clean, distinguishable exit code.
+        std::cerr << "aaronia_worker_error: unknown SDK exception (non-std::exception)\n";
+        std::cerr.flush();
+        _Exit(3);
     }
 }

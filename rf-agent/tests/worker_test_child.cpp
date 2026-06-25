@@ -1,8 +1,17 @@
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
+#include <string>
 #include <thread>
 
+// Egyetlen "mérgezett" konfigurációs értékkel szimulálja az SDK-oldali
+// crash-et (pl. AARTSAAPI belső kivétel -> SIGABRT), hogy a
+// AaroniaRfSource visszaállási logikája hardver nélkül tesztelhető legyen.
 int main() {
+    const char* poison = std::getenv("AARONIA_MAX_SPECTRUM_POINTS");
+    if (poison && std::string(poison) == "31337") {
+        std::abort();
+    }
     for (int sequence = 0; sequence < 3; ++sequence) {
         std::cout
             << R"({"schema_version":1,"sensor_id":"test-v6","source_type":"aaronia","source_device":"test-device","device_model":"SPECTRAN V6 TEST","measurement_mode":"sweepsa","session_id":"test-session","timestamp":"2026-06-21T12:00:00.000Z","sequence":)"
