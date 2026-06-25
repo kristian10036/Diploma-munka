@@ -198,6 +198,29 @@ class DeviceBaselineSettings:
         )
 
 
+ML_MODEL_TYPES = ("rule", "classical", "cnn", "onnx")
+
+
+@dataclass(frozen=True)
+class MlSettings:
+    enabled: bool
+    model_type: str
+    warnings: tuple[str, ...] = ()
+
+    @classmethod
+    def from_env(cls) -> "MlSettings":
+        warnings: list[str] = []
+        enabled = _read_bool("ML_ENABLED", True, warnings)
+        model_type = os.getenv("ML_MODEL_TYPE", "rule").strip().lower() or "rule"
+        if model_type not in ML_MODEL_TYPES:
+            warnings.append(
+                f"ML_MODEL_TYPE '{model_type}' is not supported "
+                f"({', '.join(ML_MODEL_TYPES)}); using rule."
+            )
+            model_type = "rule"
+        return cls(enabled=enabled, model_type=model_type, warnings=tuple(warnings))
+
+
 @dataclass(frozen=True)
 class BettercapSettings:
     enabled: bool

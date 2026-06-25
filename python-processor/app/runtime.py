@@ -10,8 +10,14 @@ from typing import Any
 import paho.mqtt.client as mqtt
 
 from app.assistant import AssistantSettings
-from app.config import BettercapSettings, DeviceBaselineSettings, KismetSettings, SpectrumSettings
-from app.ml import RuleBasedRfClassifier
+from app.config import (
+    BettercapSettings,
+    DeviceBaselineSettings,
+    KismetSettings,
+    MlSettings,
+    SpectrumSettings,
+)
+from app.ml import build_ml_classifier
 from app.rag import RagSettings
 from app.rf_agent_client import RfAgentSettings
 from app.services.anomaly import OnlineAnomalyPipeline
@@ -39,7 +45,8 @@ ANOMALY_PIPELINE = OnlineAnomalyPipeline(
 
 SPECTRUM_SETTINGS = SpectrumSettings.from_env()
 SPECTRUM_SOURCE_MANAGER = SpectrumSourceManager(SPECTRUM_SETTINGS)
-ML_CLASSIFIER = RuleBasedRfClassifier()
+ML_SETTINGS = MlSettings.from_env()
+ML_CLASSIFIER = build_ml_classifier(ML_SETTINGS)
 ASSISTANT_SETTINGS = AssistantSettings.from_env()
 RAG_SETTINGS = RagSettings.from_env()
 RF_AGENT_SETTINGS = RfAgentSettings.from_env()

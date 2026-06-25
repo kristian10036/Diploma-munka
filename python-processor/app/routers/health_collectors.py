@@ -10,7 +10,7 @@ from psycopg.types.json import Jsonb
 
 from app.db import get_db
 from app.metrics import COLLECTOR_STATUS
-from app.ml import RF_CLASSES
+from app.ml import RF_CLASSES, MlUnavailableError, describe_all_models
 from app.rf_agent_client import rf_agent_status
 from app.runtime import (
     ASSISTANT_SETTINGS,
@@ -26,6 +26,7 @@ from app.runtime import (
     KISMET_IMPORT_STATE,
     KISMET_SETTINGS,
     ML_CLASSIFIER,
+    ML_SETTINGS,
     OLLAMA_URL,
     RECORDING_STORAGE,
     RF_AGENT_SETTINGS,
@@ -487,29 +488,19 @@ async def health_check():
 
 @router.get("/api/ml/status")
 def ml_status():
-    return ML_CLASSIFIER.status()
+    status = ML_CLASSIFIER.status()
+    if ML_SETTINGS.warnings:
+        status["config_warnings"] = list(ML_SETTINGS.warnings)
+    return status
 
 
 @router.get("/api/ml/models")
 def ml_models():
-    status = ML_CLASSIFIER.status()
     return {
-        "models": [
-            status,
-            {
-                "available": False,
-                "status": "not_trained",
-                "model_version": "rf_nearest_centroid_v1",
-                "model_type": "classical_ml",
-            },
-            {
-                "available": False,
-                "status": "not_trained",
-                "model_version": "rf_small_cnn_v1",
-                "model_type": "cnn",
-            },
-        ],
+        "models": describe_all_models(),
         "classes": list(RF_CLASSES),
+        "ml_enabled": ML_SETTINGS.enabled,
+        "active_model_type": ML_SETTINGS.model_type,
     }
 
 
@@ -519,10 +510,18 @@ def ml_classify(request: MlClassifyRequest):
         raise HTTPException(
             status_code=422, detail="frames must contain between 1 and 128 SpectrumFrame objects"
         )
+    status = ML_CLASSIFIER.status()
+    if not status["available"]:
+        raise HTTPException(
+            status_code=503,
+            detail=f"ML classification unavailable (status: {status['status']})",
+        )
     try:
         return ML_CLASSIFIER.classify(request.frames)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except MlUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/api/spectrum/source/status")

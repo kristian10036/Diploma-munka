@@ -29,12 +29,15 @@ def test_ml_api_contract() -> None:
     assert "zigbee" in ml_status["withheld_classes"]
 
     status, registry = request("/api/ml/models")
-    assert status == 200 and len(registry["models"]) == 3
+    assert status == 200 and len(registry["models"]) == 4
     assert {model["model_type"] for model in registry["models"]} == {
         "rule_based_baseline",
         "classical_ml",
         "cnn",
+        "onnx",
     }
+    assert registry["ml_enabled"] is True
+    assert registry["active_model_type"] == "rule"
 
     powers = [-95.0] * 101
     powers[50] = -30.0

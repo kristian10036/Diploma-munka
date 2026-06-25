@@ -52,8 +52,15 @@ Az ellenőrzött hardveres útvonal:
 
 ```text
 SPECTRAN V6 -> aaronia-worker -> rf-agent /ws/spectrum
-            -> spectrum-ingest /ws/spectrum -> backend + frontend
+            -> spectrum-ingest -> frontend (WEB/Nginx, közvetlenül)
+
+rf-agent /ws/spectrum -> backend (párhuzamos analitikai fogyasztó: DB, ML,
+                          riasztások - nem a frontend útjának közbenső állomása)
 ```
+
+A pontos felelősségi határt és a teljes ábrát lásd: `ARCHITECTURE.md`
+("Áttekintő diagram", "RF adatút", "Felelősségi határok") és
+`SPECTRUM_DATA_FLOW.md`.
 
 A tesztelt beállítás 2400–2500 MHz, 100 kHz RBW, legfeljebb 16384 pont és
 10 FPS. A tényleges frame 2000 pontot tartalmazott. Az SDK `dropped` és

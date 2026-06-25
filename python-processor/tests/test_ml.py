@@ -1,6 +1,10 @@
+import os
 import unittest
+from unittest import mock
 
 import numpy as np
+from app.config import MlSettings
+from app.ml import MlUnavailableError, build_ml_classifier, describe_all_models
 from app.ml.classical import NearestCentroidRfClassifier
 from app.ml.classifier import RuleBasedRfClassifier
 from app.ml.dataset import DatasetItem, grouped_split
@@ -68,6 +72,62 @@ class MlPipelineTest(unittest.TestCase):
         )
         self.assertEqual(model.predict([[0.05, 0.05], [10.0, 10.0]]), ["noise", "wideband_unknown"])
         self.assertTrue(np.allclose(model.predict_proba([[1.0, 1.0]]).sum(axis=1), 1.0))
+
+
+class MlRuntimeSelectionTest(unittest.TestCase):
+    def test_default_settings_load_rule_baseline(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("ML_ENABLED", None)
+            os.environ.pop("ML_MODEL_TYPE", None)
+            settings = MlSettings.from_env()
+        self.assertTrue(settings.enabled)
+        self.assertEqual(settings.model_type, "rule")
+        classifier = build_ml_classifier(settings)
+        self.assertTrue(classifier.status()["available"])
+
+    def test_ml_enabled_false_yields_disabled_status_not_silent_rule(self):
+        settings = MlSettings(enabled=False, model_type="rule")
+        classifier = build_ml_classifier(settings)
+        status = classifier.status()
+        self.assertFalse(status["available"])
+        self.assertEqual(status["status"], "disabled")
+        with self.assertRaises(MlUnavailableError):
+            classifier.classify([frame(np.full(101, -90.0))])
+
+    def test_cnn_model_type_without_trained_checkpoint_is_not_trained(self):
+        settings = MlSettings(enabled=True, model_type="cnn")
+        classifier = build_ml_classifier(settings)
+        status = classifier.status()
+        self.assertFalse(status["available"])
+        self.assertEqual(status["status"], "not_trained")
+        self.assertEqual(status["model_type"], "cnn")
+        with self.assertRaises(MlUnavailableError):
+            classifier.classify([frame(np.full(101, -90.0))])
+
+    def test_onnx_model_type_without_model_file_is_model_not_found(self):
+        settings = MlSettings(enabled=True, model_type="onnx")
+        classifier = build_ml_classifier(settings)
+        status = classifier.status()
+        self.assertFalse(status["available"])
+        self.assertEqual(status["status"], "model_not_found")
+
+    def test_invalid_model_type_falls_back_to_rule_with_warning(self):
+        with mock.patch.dict(os.environ, {"ML_MODEL_TYPE": "not-a-real-model"}):
+            settings = MlSettings.from_env()
+        self.assertEqual(settings.model_type, "rule")
+        self.assertTrue(settings.warnings)
+
+    def test_describe_all_models_lists_all_four_types_independent_of_active(self):
+        models = describe_all_models()
+        self.assertEqual(
+            {model["model_type"] for model in models},
+            {"rule_based_baseline", "classical_ml", "cnn", "onnx"},
+        )
+        by_type = {model["model_type"]: model for model in models}
+        self.assertTrue(by_type["rule_based_baseline"]["available"])
+        self.assertEqual(by_type["classical_ml"]["status"], "not_trained")
+        self.assertEqual(by_type["cnn"]["status"], "not_trained")
+        self.assertEqual(by_type["onnx"]["status"], "model_not_found")
 
 
 if __name__ == "__main__":
