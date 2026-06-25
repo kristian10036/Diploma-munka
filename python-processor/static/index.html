@@ -128,6 +128,7 @@
       <div class="readout"><div class="label">Center</div><div class="value hot" id="centerReadout">--</div></div>
       <div class="readout"><div class="label">Stop</div><div class="value" id="stopReadout">--</div></div>
       <div class="readout"><div class="label">Span</div><div class="value hot" id="spanReadout">--</div></div>
+      <div class="readout"><div class="label">Felbontás</div><div class="value" id="resolutionReadout">--</div></div>
       <div class="readout"><div class="label">Marker</div><div class="value" id="markerReadout">--</div></div>
       <div class="readout"><div class="label">Realtime Peak</div><div class="value hot" id="peakReadout">--</div></div>
       <div class="readout"><div class="label">Ref Peak</div><div class="value" id="refPeakReadout">--</div></div>
@@ -426,6 +427,7 @@ const startReadout = document.getElementById('startReadout');
 const centerReadout = document.getElementById('centerReadout');
 const stopReadout = document.getElementById('stopReadout');
 const spanReadout = document.getElementById('spanReadout');
+const resolutionReadout = document.getElementById('resolutionReadout');
 const markerReadout = document.getElementById('markerReadout');
 const peakReadout = document.getElementById('peakReadout');
 const refPeakReadout = document.getElementById('refPeakReadout');
@@ -566,6 +568,7 @@ let markerFreq = null;
 let cursor = { x: 0, y: 0, freq: null, dbm: null, inside: false, target: null };
 let mode = 'select'; // select | pan | marker | demod
 let drag = null;
+let dragViewChanged = false;
 // Közös demodulációs állapot (egyetlen igazságforrás a Spectrum Monitor és a
 // Moduláció panel számára). A passband geometria/snap/hitbox logika a
 // DemodPassband modulban él, az állapot itt.
@@ -1011,6 +1014,7 @@ async function refreshRfAgentCapabilities(){
     viewportController.setCapabilities(null);
   }
 }
+window.refreshRfAgentCapabilities = refreshRfAgentCapabilities;
 async function refreshSpectrumSourceStatus(showToast=false){
   refreshRfAgentCapabilities();
   try {
@@ -2420,6 +2424,9 @@ function acceptSweep(data){
       statusText.textContent = 'ONLINE – élő spektrum adatfolyam';
     }
   }
+  resolutionReadout.textContent = Number.isFinite(parsed.stepFrequencyHz)
+    ? `${formatSpan(parsed.stepFrequencyHz/1e6)}/bin`
+    : '--';
   sourceModeValue.textContent = parsed.sourceType;
   sourceRangeValue.textContent = `${formatFreq(parsed.startFrequencyHz/1e6)} – ${formatFreq(parsed.stopFrequencyHz/1e6)}`;
   sourcePointCountValue.textContent = String(parsed.numPoints);
@@ -2523,6 +2530,7 @@ spectrumCanvas.addEventListener('mousemove', (e)=>{
       const f1 = xToFreq(p.x, spectrumPlot);
       panBy(f0 - f1);
       drag.lastX = p.x;
+      dragViewChanged = true;
     }
   }
   requestDraw();
@@ -2563,6 +2571,7 @@ spectrumCanvas.addEventListener('mousedown', (e)=>{
     startViewMin:viewMin,
     startViewMax:viewMax
   };
+  dragViewChanged = false;
   viewportController.beginInteraction();
   document.body.classList.add('no-select');
   spectrumCanvas.setPointerCapture?.(e.pointerId || 1);
@@ -2584,6 +2593,7 @@ window.addEventListener('mouseup', (e)=>{
       const f1 = xToFreq(x1, spectrumPlot);
       const f2 = xToFreq(x2, spectrumPlot);
       setView(f1, f2, 'Kijelölt sáv nagyítva');
+      dragViewChanged = true;
     }
   }
   if (drag.target === 'overview') {
@@ -2596,8 +2606,9 @@ window.addEventListener('mouseup', (e)=>{
       const c = fullXToFreq(drag.currentX, overviewPlot);
       setCenterSpan(c, span(), 'Center áthelyezve overview alapján');
     }
+    dragViewChanged = true;
   }
-  viewportController.endInteraction(currentRfViewport());
+  viewportController.endInteraction(dragViewChanged ? currentRfViewport() : undefined);
   drag = null;
   document.body.classList.remove('no-select');
   requestDraw();
@@ -2637,6 +2648,7 @@ overviewCanvas.addEventListener('mousedown', (e)=>{
   const p = canvasPoint(overviewCanvas, e);
   if (!inPlot(p.x,p.y,overviewPlot)) return;
   drag = { target:'overview', kind:'overview-select', startX:p.x, currentX:p.x, startY:p.y, currentY:p.y };
+  dragViewChanged = false;
   viewportController.beginInteraction();
   document.body.classList.add('no-select');
   e.preventDefault();

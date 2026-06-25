@@ -7,8 +7,10 @@ import unittest
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from app.application import app
 from app.routers.rf_agent import configure_rf_agent_viewport
 from app.schemas import ViewportRequest
 
@@ -91,6 +93,33 @@ class ConfigureRfAgentViewportTest(unittest.TestCase):
             with self.assertRaises(HTTPException) as exc:
                 configure_rf_agent_viewport(ViewportRequest(**VALID))
         self.assertEqual(exc.exception.status_code, 503)
+
+
+class ConfigureRfAgentViewportHttpContractTest(unittest.TestCase):
+    """A teljes ASGI/HTTP réteget gyakorolja a TestClienttel: a Pydantic
+    validáció a route-test elérése előtt buktatja el a hibás bodyt, így
+    az RF Agentet sosem hívjuk meg (nincs szükség futó rf-agentre)."""
+
+    def setUp(self):
+        self.client = TestClient(app)
+
+    def test_invalid_mode_returns_422_without_calling_agent(self):
+        with patch("app.routers.rf_agent.request_rf_agent") as mock_request:
+            response = self.client.post(
+                "/api/rf-agent/source/viewport",
+                json=dict(VALID, mode="continuous"),
+            )
+        self.assertEqual(response.status_code, 422)
+        mock_request.assert_not_called()
+
+    def test_too_few_points_returns_422_without_calling_agent(self):
+        with patch("app.routers.rf_agent.request_rf_agent") as mock_request:
+            response = self.client.post(
+                "/api/rf-agent/source/viewport",
+                json=dict(VALID, maximum_points=1),
+            )
+        self.assertEqual(response.status_code, 422)
+        mock_request.assert_not_called()
 
 
 if __name__ == "__main__":

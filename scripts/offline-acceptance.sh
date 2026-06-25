@@ -16,6 +16,15 @@ export OPENBLAS_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
+# python-processor/static/ui/*.js valódi ES modulok; a node fixture-ök
+# require()-rel töltik be őket, ami csak Node 22.12+ -on működik natívan (ld.
+# .nvmrc). Ha nvm elérhető, itt állítjuk be, hogy a script ne függjön az
+# aktív shell nvm default-jától.
+if [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+  . "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  nvm use --silent >/dev/null 2>&1 || nvm use system --silent >/dev/null 2>&1 || true
+fi
+
 python_compile_targets=(
   conftest.py
   python-processor/app

@@ -60,6 +60,7 @@ def test_static_ui_contract() -> None:
     assert tabs == ["Spektrum", "Wi-Fi", "Bluetooth / BLE", "RF Agent", "Felvételek", "ML osztályozás", "RAG", "Rendszerállapot"]
     assert {"operationDialog", "operationForm", "operationFields", "operationSubmit", "operationCancel"} <= parser.ids
     assert {"startInput", "stopInput", "sdrangelAudioDevice", "sdrangelVolume", "sdrangelBrowserAudioStatus"} <= parser.ids
+    assert {"spanReadout", "resolutionReadout", "markerReadout"} <= parser.ids
     assert not {"centerInput", "spanInput", "btnWifi24", "btnWifi5", "btnGsm", "btnLte"} & parser.ids
     assert "export const FULL_MIN = 0" in spectrum_scale and "export const FULL_MAX = 24000" in spectrum_scale
     assert "/ws/audio" in html and "prepareBrowserAudio" in html and "appendBrowserPcm" in html

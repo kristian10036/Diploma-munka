@@ -45,7 +45,15 @@ function createWiringHarness(controller) {
     zoomAt(factor) { spanHz *= factor; controller.schedule(currentViewport()); },
     pan(deltaHz) { centerHz += deltaHz; controller.schedule(currentViewport()); },
     beginDrag() { controller.beginInteraction(); },
-    endDrag(deltaHz) { centerHz += deltaHz; controller.endInteraction(currentViewport()); },
+    // index.html csak akkor adja át a viewportot endInteraction()-nek, ha a
+    // gesztus tényleges setView-t futtatott; üres (0 elmozdulású) gesztusnál
+    // bare endInteraction()-t hív, hogy a flag törlésen kívül semmi más ne
+    // történjen.
+    endDrag(deltaHz) {
+      if (deltaHz === 0) { controller.endInteraction(); return; }
+      centerHz += deltaHz;
+      controller.endInteraction(currentViewport());
+    },
   };
 }
 
@@ -99,6 +107,18 @@ async function run() {
     harness.endDrag(1e6);
     scheduler.tick(450);
     assert(requests.length === 1, 'settled pan drag triggers exactly one retune');
+  }
+
+  // Üres select-kattintás (beginDrag()+endDrag(0), nincs elmozdulás): a
+  // gesztus nem futtatott setView-t, így nem szabad viewport-kérést kiküldeni.
+  {
+    const {controller, scheduler, requests, harness} = fixture();
+    controller.setCapabilities({viewport_control: true, maximum_spectrum_points: 8192});
+    controller.setCanvasPhysicalWidth(1200);
+    harness.beginDrag();
+    harness.endDrag(0);
+    scheduler.tick(1000);
+    assert(requests.length === 0, 'a no-op click/drag must not trigger a retune');
   }
 
   // STREAMING csak az ÚJ viewportnak megfelelő, később érkező frame után áll

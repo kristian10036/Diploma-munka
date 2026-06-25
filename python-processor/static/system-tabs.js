@@ -75,6 +75,13 @@
     catch (error) { alert(error.message); }
   }
 
+  // Forrás start/stop/select (replay kiválasztás) után a Spektrum nézet
+  // viewport-controllere is friss capabilities-t kér, mert a backend váltás
+  // megváltoztathatja a viewport_control/maximum_spectrum_points értékeket.
+  function refreshViewportCapabilities() {
+    window.refreshRfAgentCapabilities?.();
+  }
+
   function formatBytes(value) {
     const bytes = Number(value);
     if (!Number.isFinite(bytes) || bytes < 0) return '--';
@@ -139,7 +146,8 @@
       }).join('') : '<tr><td colspan="8">Nincs felvétel.</td></tr>';
       rows.querySelectorAll('[data-replay]').forEach(button => button.addEventListener('click', () => {
         const speed = Number(byId('replaySpeed').value || 1);
-        rfPost('/api/rf-agent/replay/start', {recording:button.dataset.replay, speed, loop:byId('replayLoop').checked});
+        rfPost('/api/rf-agent/replay/start', {recording:button.dataset.replay, speed, loop:byId('replayLoop').checked})
+          .then(refreshViewportCapabilities);
       }));
     } catch (error) {
       rows.innerHTML = `<tr><td colspan="8">${esc(error.message)}</td></tr>`;
@@ -345,8 +353,8 @@
   }));
 
   byId('btnRfRefresh')?.addEventListener('click', refreshRfAgent);
-  byId('btnRfStart')?.addEventListener('click', () => rfPost('/api/rf-agent/source/start'));
-  byId('btnRfStop')?.addEventListener('click', () => rfPost('/api/rf-agent/source/stop'));
+  byId('btnRfStart')?.addEventListener('click', () => rfPost('/api/rf-agent/source/start').then(refreshViewportCapabilities));
+  byId('btnRfStop')?.addEventListener('click', () => rfPost('/api/rf-agent/source/stop').then(refreshViewportCapabilities));
   byId('btnAaroniaProbe')?.addEventListener('click', () => rfPost('/api/rf-agent/aaronia/probe'));
   byId('btnUsrpProbe')?.addEventListener('click', () => rfPost('/api/rf-agent/usrp/probe'));
   byId('btnRecordingRefresh')?.addEventListener('click', refreshRecordings);
