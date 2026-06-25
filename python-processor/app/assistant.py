@@ -374,9 +374,7 @@ def build_grounded_prompt(
 ) -> str:
     capped_sources = sources[:max_source_records]
     sources_reserve = len(
-        json.dumps(
-            {"source_records": capped_sources}, ensure_ascii=False, separators=(",", ":")
-        )
+        json.dumps({"source_records": capped_sources}, ensure_ascii=False, separators=(",", ":"))
     )
     context_budget = max(200, max_prompt_chars - sources_reserve)
     bounded_context = _pack_context_by_budget(context, context_budget)
