@@ -301,7 +301,13 @@ def ask_database(request: AskRequest):
             "status": "ai_component_not_available",
             "generation_status": generation_status["status"],
         }
-    prompt = build_grounded_prompt(question, context, source_records)
+    prompt = build_grounded_prompt(
+        question,
+        context,
+        source_records,
+        ASSISTANT_SETTINGS.max_prompt_chars,
+        ASSISTANT_SETTINGS.max_source_records,
+    )
     try:
         answer = call_ollama(ASSISTANT_SETTINGS, prompt)
     except RuntimeError as exc:

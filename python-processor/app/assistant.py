@@ -21,6 +21,9 @@ class AssistantSettings:
     model: str
     timeout_seconds: float
     max_context_records: int
+    max_prompt_chars: int = 12_000
+    max_source_records: int = 20
+    num_predict: int = 768
 
     @classmethod
     def from_env(cls) -> "AssistantSettings":
@@ -33,12 +36,31 @@ class AssistantSettings:
             limit = max(1, min(50, int(os.getenv("ASSISTANT_MAX_CONTEXT_RECORDS", "10"))))
         except ValueError:
             limit = 10
+        try:
+            max_prompt_chars = max(
+                2_000, min(60_000, int(os.getenv("ASSISTANT_MAX_PROMPT_CHARS", "12000")))
+            )
+        except ValueError:
+            max_prompt_chars = 12_000
+        try:
+            max_source_records = max(
+                1, min(100, int(os.getenv("ASSISTANT_MAX_SOURCE_RECORDS", "20")))
+            )
+        except ValueError:
+            max_source_records = 20
+        try:
+            num_predict = max(64, min(2048, int(os.getenv("ASSISTANT_NUM_PREDICT", "768"))))
+        except ValueError:
+            num_predict = 768
         return cls(
             enabled=enabled,
             ollama_url=os.getenv("OLLAMA_URL", "http://ollama:11434").rstrip("/"),
             model=os.getenv("OLLAMA_MODEL", "").strip(),
             timeout_seconds=timeout,
             max_context_records=limit,
+            max_prompt_chars=max_prompt_chars,
+            max_source_records=max_source_records,
+            num_predict=num_predict,
         )
 
     def status(self) -> dict[str, Any]:
@@ -286,29 +308,90 @@ def collect_sql_context(
     return context, sources
 
 
-def build_grounded_prompt(
-    question: str, context: dict[str, Any], sources: list[dict[str, str]]
-) -> str:
-    bounded_context: dict[str, Any] = {}
-    populated_kinds = sum(
-        1 for records in context.values() if isinstance(records, list) and records
-    )
-    sample_limit = 3 if populated_kinds <= 2 else 1
+_MAX_FIELD_CHARS = 280
+
+
+def _trim_field(value: Any) -> Any:
+    """Cap an individual record field so one oversized free-text value (e.g.
+    an anomaly description) can't crowd out other records in the budget."""
+    if isinstance(value, str) and len(value) > _MAX_FIELD_CHARS:
+        return value[: _MAX_FIELD_CHARS - 3] + "..."
+    return value
+
+
+def _trim_record(record: Any) -> Any:
+    if isinstance(record, dict):
+        return {key: _trim_field(value) for key, value in record.items()}
+    return record
+
+
+def _pack_context_by_budget(context: dict[str, Any], budget_chars: int) -> dict[str, Any]:
+    """Fill per-kind sample records up to a character budget instead of a
+    fixed count. Records arrive ordered most-recent-first from SQL, and kinds
+    are ordered by question-relevance (see select_context_kinds), so filling
+    round-robin in that order and stopping a kind once it would blow the
+    budget drops the least-relevant (oldest/least-matched) rows first -
+    never a mid-record or mid-string cut.
+    """
+    bounded: dict[str, Any] = {}
+    queues: dict[str, list[Any]] = {}
     for kind, records in context.items():
         if isinstance(records, list):
-            bounded_context[kind] = {
-                "supplied_count": len(records),
-                "records": records[:sample_limit],
-            }
+            bounded[kind] = {"supplied_count": len(records), "records": []}
+            queues[kind] = [_trim_record(record) for record in records]
         else:
-            bounded_context[kind] = records
+            bounded[kind] = records
+
+    def serialized_size() -> int:
+        return len(json.dumps(bounded, ensure_ascii=False, separators=(",", ":")))
+
+    exhausted: set[str] = {kind for kind, queue in queues.items() if not queue}
+    while len(exhausted) < len(queues):
+        progressed = False
+        for kind, queue in queues.items():
+            if kind in exhausted:
+                continue
+            bounded[kind]["records"].append(queue[0])
+            if serialized_size() > budget_chars:
+                bounded[kind]["records"].pop()
+                exhausted.add(kind)
+                continue
+            queue.pop(0)
+            progressed = True
+            if not queue:
+                exhausted.add(kind)
+        if not progressed:
+            break
+    return bounded
+
+
+def build_grounded_prompt(
+    question: str,
+    context: dict[str, Any],
+    sources: list[dict[str, str]],
+    max_prompt_chars: int = 12_000,
+    max_source_records: int = 20,
+) -> str:
+    capped_sources = sources[:max_source_records]
+    sources_reserve = len(
+        json.dumps(
+            {"source_records": capped_sources}, ensure_ascii=False, separators=(",", ":")
+        )
+    )
+    context_budget = max(200, max_prompt_chars - sources_reserve)
+    bounded_context = _pack_context_by_budget(context, context_budget)
     payload = json.dumps(
-        {"context": bounded_context, "source_records": sources[:6]},
+        {"context": bounded_context, "source_records": capped_sources},
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    if len(payload) > 3_500:
-        payload = payload[:3_500] + "...TRUNCATED"
+    while len(payload) > max_prompt_chars and capped_sources:
+        capped_sources = capped_sources[:-1]
+        payload = json.dumps(
+            {"context": bounded_context, "source_records": capped_sources},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
     normalized = question.casefold()
     hungarian_markers = (
         "á",
@@ -378,7 +461,11 @@ def call_ollama(settings: AssistantSettings, prompt: str) -> str:
                 # return an empty `response`, which is unusable by this endpoint.
                 "think": False,
                 "keep_alive": "10m",
-                "options": {"num_ctx": 4096, "num_predict": 192, "temperature": 0.1},
+                "options": {
+                    "num_ctx": 4096,
+                    "num_predict": settings.num_predict,
+                    "temperature": 0.1,
+                },
             },
             ensure_ascii=False,
         ).encode("utf-8"),

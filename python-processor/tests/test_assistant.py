@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from app.assistant import (
@@ -8,6 +9,12 @@ from app.assistant import (
     normalize_ollama_answer,
     select_context_kinds,
 )
+
+
+def _extract_payload(prompt: str) -> dict:
+    start = prompt.index("Structured context: ") + len("Structured context: ")
+    end = prompt.index("\n\nQuestion:")
+    return json.loads(prompt[start:end])
 
 
 class AssistantTest(unittest.TestCase):
@@ -77,6 +84,66 @@ class AssistantTest(unittest.TestCase):
     def test_normalizes_json_wrapped_model_answer(self):
         self.assertEqual(normalize_ollama_answer('{"answer":"Emberi válasz."}'), "Emberi válasz.")
         self.assertEqual(normalize_ollama_answer("Egyszerű szöveg."), "Egyszerű szöveg.")
+
+    def test_many_populated_kinds_do_not_collapse_to_one_record_each(self):
+        context = {
+            kind: [{"id": f"{kind}-{i}", "field": "value"} for i in range(5)]
+            for kind in ("sessions", "wifi", "bluetooth", "peaks", "anomalies")
+        }
+        prompt = build_grounded_prompt("Adj összefoglalót", context, [])
+        payload = _extract_payload(prompt)
+        self.assertEqual(len(payload["context"]), 5)
+        for kind, block in payload["context"].items():
+            self.assertEqual(block["supplied_count"], 5)
+            self.assertGreater(
+                len(block["records"]), 1, f"{kind} collapsed to <=1 record despite ample budget"
+            )
+
+    def test_oversized_context_drops_whole_records_not_a_blind_char_cut(self):
+        context = {
+            kind: [{"id": f"{kind}-{i}", "field": "v" * 200} for i in range(50)]
+            for kind in ("sessions", "wifi", "bluetooth", "peaks", "anomalies")
+        }
+        sources = [{"record_type": "wifi", "record_id": f"wifi-{i}"} for i in range(50)]
+        prompt = build_grounded_prompt(
+            "Adj összefoglalót", context, sources, max_prompt_chars=4000, max_source_records=20
+        )
+        self.assertNotIn("TRUNCATED", prompt)
+        start = prompt.index("Structured context: ") + len("Structured context: ")
+        end = prompt.index("\n\nQuestion:")
+        payload_text = prompt[start:end]
+        self.assertLessEqual(len(payload_text), 4000)
+        payload = json.loads(payload_text)  # raises if the payload is malformed JSON
+        for block in payload["context"].values():
+            self.assertEqual(block["supplied_count"], 50)
+            self.assertLessEqual(len(block["records"]), 50)
+        self.assertLessEqual(len(payload["source_records"]), 20)
+
+    def test_settings_from_env_parses_new_budget_knobs(self):
+        import os
+
+        previous = {
+            key: os.environ.get(key)
+            for key in (
+                "ASSISTANT_MAX_PROMPT_CHARS",
+                "ASSISTANT_MAX_SOURCE_RECORDS",
+                "ASSISTANT_NUM_PREDICT",
+            )
+        }
+        try:
+            os.environ["ASSISTANT_MAX_PROMPT_CHARS"] = "99999999"
+            os.environ["ASSISTANT_MAX_SOURCE_RECORDS"] = "0"
+            os.environ["ASSISTANT_NUM_PREDICT"] = "9999999"
+            settings = AssistantSettings.from_env()
+            self.assertEqual(settings.max_prompt_chars, 60_000)
+            self.assertEqual(settings.max_source_records, 1)
+            self.assertEqual(settings.num_predict, 2048)
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
 
 if __name__ == "__main__":
