@@ -52,8 +52,9 @@ Az egyszeri Ollama modelltelepítés: `bash scripts/ollama-setup.sh`. A
 A részletes indítási módokat a [RUNNING.md](RUNNING.md), a költözést a
 [MIGRATION.md](MIGRATION.md), a Grafana nélküli offline monitoringot pedig a
 [MONITORING.md](MONITORING.md) tartalmazza. Az architektúra leírása az
-[ARCHITECTURE.md](ARCHITECTURE.md), a phase2 tételes eredménye pedig a
-[PHASE2_IMPLEMENTATION_REPORT.md](PHASE2_IMPLEMENTATION_REPORT.md) fájlban található.
+[ARCHITECTURE.md](ARCHITECTURE.md), a korábbi fázisok lezárt eredménye pedig a
+[PROJECT_HISTORY.md](PROJECT_HISTORY.md) fájlban található. A jelenleg is
+folyó refaktor állapotát a [MAJOR_REFACTOR_REPORT.md](MAJOR_REFACTOR_REPORT.md) követi.
 
 ## Állapotjelölések
 
