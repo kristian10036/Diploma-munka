@@ -168,10 +168,13 @@ def annotate_devices(
     baseline_rows = list(cur.fetchall())
     if not baseline_rows:
         # Fallback: baselines saved without a reference_set_id (via the standalone
-        # baseline-save flow) are linked only by location_name + is_active. Look up
-        # the reference set's location_name and find the active baselines there.
+        # baseline-save flow) are linked only by location_name + is_active, and
+        # sometimes the reference_set has a typo in location_name. Try two lookups:
+        # 1. location_name exact match (case-insensitive)
+        # 2. source_measurement_session_id match (immune to location_name typos)
         cur.execute(
-            "SELECT location_name FROM reference_sets WHERE id = %s AND archived_at IS NULL",
+            "SELECT location_name, source_measurement_session_id "
+            "FROM reference_sets WHERE id = %s AND archived_at IS NULL",
             (reference_set_id,),
         )
         ref_set_row = cur.fetchone()
@@ -182,6 +185,15 @@ def annotate_devices(
                 (ref_set_row["location_name"], protocol),
             )
             baseline_rows = list(cur.fetchall())
+            if not baseline_rows and ref_set_row["source_measurement_session_id"]:
+                # location_name typo: fall back to the session that produced both
+                # the reference set and the device baselines.
+                cur.execute(
+                    "SELECT * FROM device_baselines "
+                    "WHERE source_measurement_session_id = %s AND protocol = %s AND is_active",
+                    (ref_set_row["source_measurement_session_id"], protocol),
+                )
+                baseline_rows = list(cur.fetchall())
     matcher = match_wifi_identity if protocol == "wifi" else match_bluetooth_identity
     diff_fn = wifi_differences if protocol == "wifi" else bluetooth_differences
 
